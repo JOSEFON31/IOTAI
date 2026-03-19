@@ -316,7 +316,7 @@ function readBody(req) {
 }
 
 function serveStatic(res, pathname) {
-  const MIME = { '.html':'text/html', '.css':'text/css', '.js':'application/javascript', '.json':'application/json', '.png':'image/png', '.svg':'image/svg+xml', '.ico':'image/x-icon' };
+  const MIME = { '.html':'text/html', '.css':'text/css', '.js':'application/javascript', '.json':'application/json', '.png':'image/png', '.svg':'image/svg+xml', '.ico':'image/x-icon', '.pdf':'application/pdf' };
   let fp = pathname === '/' ? '/index.html' : pathname;
   fp = fp.replace(/\.\./g, '');
   try {
