@@ -90,28 +90,56 @@ function buildVisualizerHTML() {
   const agentAddresses = {};
   for (const a of demoAgents) agentAddresses[a.wallet.address] = { name: a.name, color: a.color };
 
+  // Auto-assign colors to all known addresses
+  const allColors = ['#6C5CE7','#00B894','#E17055','#0984E3','#e84393','#00cec9','#fdcb6e','#d63031','#a29bfe','#55efc4','#fab1a0','#74b9ff'];
+  const allAddresses = new Map();
+  let colorIdx = 0;
+
+  // Known demo agents first
+  for (const a of demoAgents) {
+    allAddresses.set(a.wallet.address, { name: a.name, color: a.color });
+  }
+
+  // Discover all other addresses
+  for (const [, tx] of dag.transactions) {
+    if (tx.from && !allAddresses.has(tx.from) && tx.from !== 'iotai_genesis') {
+      allAddresses.set(tx.from, {
+        name: 'User ' + (allAddresses.size - 3),
+        color: allColors[(colorIdx++) % allColors.length],
+      });
+    }
+  }
+
   const nodes = [], edges = [];
   for (const [id, tx] of dag.transactions) {
-    const sender = agentAddresses[tx.from];
+    const sender = allAddresses.get(tx.from);
     nodes.push({
       id: tx.id, short: tx.id.substring(0,10), type: tx.type,
       from: tx.from, to: tx.to, amount: tx.amount, timestamp: tx.timestamp,
       weight: tx.cumulativeWeight,
-      senderName: sender?.name || (tx.type === 'genesis' ? 'Genesis' : 'Unknown'),
+      senderName: sender?.name || (tx.type === 'genesis' ? 'Genesis' : tx.from.substring(5,13)),
       color: sender?.color || '#FDCB6E', metadata: tx.metadata,
     });
     for (const pid of tx.parents) edges.push({ from: tx.id, to: pid });
   }
 
-  const data = {
-    nodes, edges, stats: dag.getStats(),
-    agents: demoAgents.map(a => ({
-      name: a.name, address: a.wallet.address,
-      balance: dag.getBalance(a.wallet.address), color: a.color,
-    })),
-  };
+  // Build agents list from all addresses with balances
+  const agentsList = [];
+  for (const [addr, info] of allAddresses) {
+    const bal = dag.getBalance(addr);
+    if (bal > 0 || info.name.startsWith('User')) {
+      agentsList.push({ name: info.name, address: addr, balance: bal, color: info.color });
+    }
+  }
+  // Also add any address with balance not yet in the list
+  for (const [addr, bal] of dag.balances) {
+    if (bal > 0 && !allAddresses.has(addr) && addr !== 'iotai_genesis') {
+      agentsList.push({ name: addr.substring(5, 13), address: addr, balance: bal, color: '#a29bfe' });
+    }
+  }
 
-  return getVisualizerTemplate().replace('__DATA__', JSON.stringify(data));
+  const data = { nodes, edges, stats: dag.getStats(), agents: agentsList };
+  return data;
 }
 
 // ---- HTTP Server ----
@@ -125,10 +153,20 @@ const server = createServer(async (req, res) => {
   const path = url.pathname;
 
   try {
-    // ---- Visualizer ----
+    // ---- Visualizer page ----
     if (path === '/visualizer' || path === '/visualizer/') {
+      const data = buildVisualizerData();
+      const html = getVisualizerTemplate().replace('__DATA__', JSON.stringify(data));
       res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(buildVisualizerHTML());
+      res.end(html);
+      return;
+    }
+
+    // ---- Visualizer live data (for auto-refresh) ----
+    if (path === '/api/v1/visualizer/data') {
+      const data = buildVisualizerData();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(data));
       return;
     }
 
@@ -336,6 +374,23 @@ DATA.edges.forEach(e=>{const from=positions[e.from],to=positions[e.to];if(!from|
 DATA.nodes.forEach(n=>{const p=positions[n.id];const r=18+Math.min(n.weight*1.5,20);const glow=ctx.createRadialGradient(p.x,p.y,r*0.5,p.x,p.y,r*2);glow.addColorStop(0,n.color+'33');glow.addColorStop(1,'transparent');ctx.fillStyle=glow;ctx.fillRect(p.x-r*2,p.y-r*2,r*4,r*4);ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fillStyle=n.color+'22';ctx.fill();ctx.strokeStyle=n.color;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#fff';ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.fillText(n.senderName,p.x,p.y-4);ctx.font='10px monospace';ctx.fillStyle=n.color;ctx.fillText(n.type==='genesis'?'GENESIS':n.amount+' IOTAI',p.x,p.y+10);ctx.fillStyle='#0a0a1a';ctx.beginPath();ctx.arc(p.x+r*0.7,p.y-r*0.7,9,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#888';ctx.lineWidth=1;ctx.stroke();ctx.fillStyle='#fff';ctx.font='bold 8px sans-serif';ctx.fillText(n.weight,p.x+r*0.7,p.y-r*0.7+3)});
 ctx.restore()}
 render();canvas.style.cursor='grab';
+
+// ---- Auto-refresh every 5 seconds ----
+setInterval(async()=>{
+  try{
+    const res=await fetch('/api/v1/visualizer/data');
+    const newData=await res.json();
+    // Check if data changed
+    if(newData.nodes.length!==DATA.nodes.length){
+      // Update stats
+      document.getElementById('s-tx').textContent=newData.stats.totalTransactions;
+      document.getElementById('s-tips').textContent=newData.stats.tipCount;
+      document.getElementById('s-addr').textContent=newData.stats.uniqueAddresses;
+      // Reload page to get new layout
+      location.reload();
+    }
+  }catch(e){}
+},5000);
 </script></body></html>`;
 }
 
