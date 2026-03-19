@@ -295,9 +295,9 @@ export class Storage {
       this._saveToDisk(state);
       this.saveCount++;
 
-      // Save to GitHub every 60s (to avoid rate limits) or when forced
+      // Save to GitHub every 30s (to avoid rate limits) or when forced
       const timeSinceGithub = Date.now() - this.lastGithubSave;
-      if (this.githubEnabled && (forceGithub || timeSinceGithub > 60000)) {
+      if (this.githubEnabled && (forceGithub || timeSinceGithub > 30000)) {
         this._saveToGithub(state).catch(err =>
           console.error('[Storage] GitHub async save error:', err.message)
         );
@@ -318,13 +318,14 @@ export class Storage {
    * @returns {boolean}
    */
   async load() {
+    console.log(`[Storage] Loading... GitHub enabled: ${this.githubEnabled}, token length: ${GITHUB_TOKEN.length}`);
+
     // 1. Try disk (fast, available within same deploy)
     const diskState = this._loadFromDisk();
     if (diskState && diskState.transactions?.length > 0) {
       const ok = this._restoreState(diskState);
       if (ok) {
-        console.log('[Storage] Restored from disk cache');
-        // Fetch GitHub SHA in background for future saves
+        console.log(`[Storage] Restored from disk: ${diskState.transactions.length} txs, ${Object.keys(diskState.balances || {}).length} addrs`);
         if (this.githubEnabled) this._fetchGithubSha().catch(() => {});
         return true;
       }
@@ -332,16 +333,19 @@ export class Storage {
 
     // 2. Try GitHub (permanent, survives redeploy)
     if (this.githubEnabled) {
+      console.log('[Storage] Disk empty, trying GitHub...');
       await this._ensureDataBranch();
       const githubState = await this._loadFromGithub();
       if (githubState && githubState.transactions?.length > 0) {
         const ok = this._restoreState(githubState);
         if (ok) {
-          // Cache to disk for faster subsequent loads
+          console.log(`[Storage] Restored from GitHub: ${githubState.transactions.length} txs`);
           this._saveToDisk(githubState);
           return true;
         }
       }
+    } else {
+      console.log('[Storage] WARNING: GITHUB_TOKEN not set! Data WILL be lost on redeploy.');
     }
 
     return false;
