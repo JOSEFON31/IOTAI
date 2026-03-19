@@ -10,4 +10,4 @@ COPY docs/ ./docs/
 
 EXPOSE 8080
 
-CMD ["node", "src/index.js", "--api-port", "8080"]
+CMD ["node", "src/server.js"]
