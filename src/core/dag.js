@@ -215,6 +215,71 @@ export class DAG {
   }
 
   /**
+   * Query data transactions with filters
+   * @param {object} [filters]
+   * @param {string} [filters.from] - filter by sender address
+   * @param {string} [filters.key] - metadata key to match
+   * @param {string} [filters.value] - metadata value to match (requires key)
+   * @param {number} [filters.since] - timestamp lower bound (ms)
+   * @param {number} [filters.until] - timestamp upper bound (ms)
+   * @param {number} [filters.limit=50] - max results
+   * @param {number} [filters.offset=0] - skip first N results
+   * @returns {{ transactions: Transaction[], total: number }}
+   */
+  queryData(filters = {}) {
+    const { from, key, value, since, until, limit = 50, offset = 0 } = filters;
+    const results = [];
+
+    for (const tx of this.transactions.values()) {
+      if (tx.type !== 'data') continue;
+
+      if (from && tx.from !== from) continue;
+      if (since && tx.timestamp < since) continue;
+      if (until && tx.timestamp > until) continue;
+
+      if (key && tx.metadata) {
+        if (!(key in tx.metadata)) continue;
+        if (value !== undefined && String(tx.metadata[key]) !== String(value)) continue;
+      } else if (key) {
+        continue; // key filter specified but no metadata
+      }
+
+      results.push(tx);
+    }
+
+    // Sort newest first
+    results.sort((a, b) => b.timestamp - a.timestamp);
+
+    return {
+      transactions: results.slice(offset, offset + limit),
+      total: results.length,
+    };
+  }
+
+  /**
+   * Full-text search across data transaction metadata
+   * @param {string} query - search string
+   * @param {number} [limit=20] - max results
+   * @returns {Transaction[]}
+   */
+  searchData(query, limit = 20) {
+    const q = query.toLowerCase();
+    const results = [];
+
+    for (const tx of this.transactions.values()) {
+      if (tx.type !== 'data' || !tx.metadata) continue;
+
+      const json = JSON.stringify(tx.metadata).toLowerCase();
+      if (json.includes(q)) {
+        results.push(tx);
+        if (results.length >= limit) break;
+      }
+    }
+
+    return results.sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  /**
    * Export the full DAG state for syncing to another node
    * @returns {object}
    */

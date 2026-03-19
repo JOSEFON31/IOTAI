@@ -453,6 +453,21 @@ Response: { success: true, amount: 1000, message: "Welcome to IOTAI!" }</code></
       <td><code>/api/v1/faucet/claim</code></td>
       <td>Submit face verification and claim 1,000 IOTAI.</td>
     </tr>
+    <tr>
+      <td><span class="method get">GET</span></td>
+      <td><code>/api/v1/data/search</code></td>
+      <td>Search data transactions. Params: <code>q, from, key, value, since, until, limit, offset</code></td>
+    </tr>
+    <tr>
+      <td><span class="method get">GET</span></td>
+      <td><code>/api/v1/data/:id</code></td>
+      <td>Get a specific data transaction by ID.</td>
+    </tr>
+    <tr>
+      <td><span class="method get">GET</span></td>
+      <td><code>/api/v1/events</code></td>
+      <td>SSE stream for real-time events (transactions, peers, sync).</td>
+    </tr>
   </table>
 
   <h3>Authenticated Endpoints (Bearer Token)</h3>
@@ -508,6 +523,42 @@ Response: { success: true, amount: 1000, message: "Welcome to IOTAI!" }</code></
 
 <span class="kw">const</span> result = <span class="kw">await</span> tx.json();
 console.log(result.txId); <span class="cm">// Transaction confirmed!</span></code></pre>
+
+  <h3>Example: Query Data from the DAG</h3>
+  <pre><code><span class="cm">// Full-text search across all data transactions</span>
+<span class="kw">const</span> search = <span class="kw">await</span> fetch(<span class="str">'http://localhost:8080/api/v1/data/search?q=translation'</span>);
+<span class="kw">const</span> { results } = <span class="kw">await</span> search.json();
+
+<span class="cm">// Filter by metadata key + value</span>
+<span class="kw">const</span> msgs = <span class="kw">await</span> fetch(<span class="str">'http://localhost:8080/api/v1/data/search?key=type&amp;value=message&amp;limit=10'</span>);
+
+<span class="cm">// Filter by sender</span>
+<span class="kw">const</span> mine = <span class="kw">await</span> fetch(<span class="str">'http://localhost:8080/api/v1/data/search?from=iotai_myaddress'</span>);
+
+<span class="cm">// Get specific data transaction</span>
+<span class="kw">const</span> tx = <span class="kw">await</span> fetch(<span class="str">'http://localhost:8080/api/v1/data/abc123...'</span>);</code></pre>
+
+  <h3>Example: Real-time Events (SSE)</h3>
+  <pre><code><span class="cm">// Connect to the event stream</span>
+<span class="kw">const</span> events = <span class="kw">new</span> EventSource(<span class="str">'http://localhost:8080/api/v1/events'</span>);
+
+<span class="cm">// Listen for new transactions</span>
+events.addEventListener(<span class="str">'transaction'</span>, (e) => {
+  <span class="kw">const</span> tx = JSON.parse(e.data);
+  console.log(<span class="str">`New tx: ${tx.from} -> ${tx.to} (${tx.amount} IOTAI)`</span>);
+});
+
+<span class="cm">// Listen for peer changes</span>
+events.addEventListener(<span class="str">'peer:connect'</span>, (e) => {
+  <span class="kw">const</span> { peerId, totalPeers } = JSON.parse(e.data);
+  console.log(<span class="str">`Peer joined: ${peerId} (${totalPeers} total)`</span>);
+});
+
+<span class="cm">// Listen for DAG sync events</span>
+events.addEventListener(<span class="str">'sync'</span>, (e) => {
+  <span class="kw">const</span> { imported, totalTransactions } = JSON.parse(e.data);
+  console.log(<span class="str">`Synced ${imported} txs (${totalTransactions} total)`</span>);
+});</code></pre>
 </section>
 
 <!-- CLI WALLET -->

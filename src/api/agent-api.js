@@ -43,6 +43,10 @@ export class AgentAPI {
     /** @type {Map<string, { wallet: Wallet, expiresAt: number }>} */
     this.sessions = new Map();
 
+    // SSE clients for real-time events
+    /** @type {Set<import('http').ServerResponse>} */
+    this.sseClients = new Set();
+
     // Token TTL: 1 hour
     this.tokenTTL = 60 * 60 * 1000;
   }
@@ -66,6 +70,11 @@ export class AgentAPI {
       try {
         const url = new URL(req.url, `http://localhost:${this.apiPort}`);
 
+        // SSE endpoint (special handling - keeps connection open)
+        if (req.method === 'GET' && url.pathname === '/api/v1/events') {
+          return this._handleSSE(req, res);
+        }
+
         // Serve docs site for non-API routes
         if (!url.pathname.startsWith('/api/')) {
           return this._serveStatic(req, res, url.pathname);
@@ -84,6 +93,7 @@ export class AgentAPI {
     return new Promise((resolve) => {
       this.server.listen(this.apiPort, () => {
         console.log(`[IOTAI API] Agent API running on http://localhost:${this.apiPort}`);
+        this._setupSSEEvents();
         resolve();
       });
     });
@@ -130,6 +140,15 @@ export class AgentAPI {
     }
     if (method === 'POST' && path === '/api/v1/faucet/claim') {
       return this._faucetClaim(body, req);
+    }
+
+    // Data query endpoints (public)
+    if (method === 'GET' && path === '/api/v1/data/search') {
+      return this._searchData(url.searchParams);
+    }
+    if (method === 'GET' && path.startsWith('/api/v1/data/')) {
+      const txId = path.split('/api/v1/data/')[1];
+      if (txId) return this._getDataTransaction(txId);
     }
 
     // Authenticated endpoints
@@ -245,8 +264,12 @@ export class AgentAPI {
       return { status: 400, data: { error: result.error } };
     }
 
-    // Broadcast to network
+    // Broadcast to network and SSE clients
     this.node.broadcastTransaction(tx).catch(console.error);
+    this._broadcastSSE('transaction', {
+      id: tx.id, type: tx.type, from: tx.from, to: tx.to,
+      amount: tx.amount, timestamp: tx.timestamp,
+    });
 
     return {
       status: 200,
@@ -286,6 +309,10 @@ export class AgentAPI {
     }
 
     this.node.broadcastTransaction(tx).catch(console.error);
+    this._broadcastSSE('transaction', {
+      id: tx.id, type: tx.type, from: tx.from,
+      timestamp: tx.timestamp, metadata: tx.metadata,
+    });
 
     return {
       status: 200,
@@ -426,6 +453,181 @@ export class AgentAPI {
       status: result.success ? 200 : 400,
       data: result,
     };
+  }
+
+  // ============================================================
+  // DATA QUERY ENDPOINTS
+  // ============================================================
+
+  /**
+   * GET /api/v1/data/search?from=addr&key=k&value=v&since=ts&until=ts&limit=N&offset=N&q=text
+   * Search data transactions on the DAG
+   */
+  _searchData(params) {
+    const q = params.get('q');
+
+    // Full-text search mode
+    if (q) {
+      const limit = parseInt(params.get('limit') || '20', 10);
+      const results = this.dag.searchData(q, limit);
+      return {
+        status: 200,
+        data: {
+          query: q,
+          results: results.map(tx => ({
+            id: tx.id,
+            from: tx.from,
+            metadata: tx.metadata,
+            timestamp: tx.timestamp,
+          })),
+          total: results.length,
+        },
+      };
+    }
+
+    // Structured filter mode
+    const filters = {};
+    if (params.get('from')) filters.from = params.get('from');
+    if (params.get('key')) filters.key = params.get('key');
+    if (params.get('value')) filters.value = params.get('value');
+    if (params.get('since')) filters.since = parseInt(params.get('since'), 10);
+    if (params.get('until')) filters.until = parseInt(params.get('until'), 10);
+    if (params.get('limit')) filters.limit = parseInt(params.get('limit'), 10);
+    if (params.get('offset')) filters.offset = parseInt(params.get('offset'), 10);
+
+    const { transactions, total } = this.dag.queryData(filters);
+
+    return {
+      status: 200,
+      data: {
+        filters,
+        results: transactions.map(tx => ({
+          id: tx.id,
+          from: tx.from,
+          metadata: tx.metadata,
+          timestamp: tx.timestamp,
+        })),
+        total,
+        returned: transactions.length,
+      },
+    };
+  }
+
+  /**
+   * GET /api/v1/data/:txId
+   * Get a specific data transaction
+   */
+  _getDataTransaction(txId) {
+    const tx = this.dag.getTransaction(txId);
+    if (!tx) {
+      return { status: 404, data: { error: 'Transaction not found' } };
+    }
+    if (tx.type !== 'data') {
+      return { status: 400, data: { error: 'Transaction is not a data transaction' } };
+    }
+    return {
+      status: 200,
+      data: {
+        id: tx.id,
+        from: tx.from,
+        metadata: tx.metadata,
+        timestamp: tx.timestamp,
+        parents: tx.parents,
+        confirmationStatus: this.validator.getConfirmationStatus(txId),
+      },
+    };
+  }
+
+  // ============================================================
+  // SERVER-SENT EVENTS (Real-time)
+  // ============================================================
+
+  /**
+   * GET /api/v1/events
+   * SSE stream for real-time notifications
+   * Events: transaction, confirmation, peer:connect, peer:disconnect
+   */
+  _handleSSE(req, res) {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    });
+
+    // Send initial connection event
+    res.write(`event: connected\ndata: ${JSON.stringify({ message: 'Connected to IOTAI event stream', timestamp: Date.now() })}\n\n`);
+
+    this.sseClients.add(res);
+
+    // Heartbeat every 30s to keep connection alive
+    const heartbeat = setInterval(() => {
+      res.write(`: heartbeat\n\n`);
+    }, 30000);
+
+    req.on('close', () => {
+      this.sseClients.delete(res);
+      clearInterval(heartbeat);
+    });
+  }
+
+  /**
+   * Broadcast an SSE event to all connected clients
+   * @param {string} event - event name
+   * @param {object} data - event payload
+   */
+  _broadcastSSE(event, data) {
+    const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+    for (const client of this.sseClients) {
+      try {
+        client.write(message);
+      } catch {
+        this.sseClients.delete(client);
+      }
+    }
+  }
+
+  /**
+   * Wire up DAG/node events to SSE stream
+   */
+  _setupSSEEvents() {
+    // Transaction received from P2P network
+    this.node.on('transaction:received', (tx) => {
+      this._broadcastSSE('transaction', {
+        id: tx.id,
+        type: tx.type,
+        from: tx.from,
+        to: tx.to,
+        amount: tx.amount,
+        timestamp: tx.timestamp,
+        metadata: tx.metadata || null,
+      });
+    });
+
+    // DAG sync complete
+    this.node.on('sync:complete', ({ peerId, imported }) => {
+      this._broadcastSSE('sync', {
+        peerId: peerId.substring(0, 12) + '...',
+        imported,
+        totalTransactions: this.dag.transactions.size,
+      });
+    });
+
+    // Peer connected
+    this.node.on('peer:connected', ({ peerId }) => {
+      this._broadcastSSE('peer:connect', {
+        peerId: peerId.substring(0, 12) + '...',
+        totalPeers: this.node.getPeerCount(),
+      });
+    });
+
+    // Peer disconnected
+    this.node.on('peer:disconnected', ({ peerId }) => {
+      this._broadcastSSE('peer:disconnect', {
+        peerId: peerId.substring(0, 12) + '...',
+        totalPeers: this.node.getPeerCount(),
+      });
+    });
   }
 
   // ============================================================
