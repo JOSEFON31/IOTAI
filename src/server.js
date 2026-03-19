@@ -29,6 +29,9 @@ import { P2PSync } from './network/p2p.js';
 import { ContractEngine } from './contracts/engine.js';
 import { Orchestrator } from './orchestrator/orchestrator.js';
 import { RateLimiter } from './api/rate-limiter.js';
+import { TokenManager } from './tokens/token-manager.js';
+import { BatchProcessor } from './core/batch.js';
+import { EncryptionLayer } from './core/encryption.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DOCS_DIR = resolve(__dirname, '../docs');
@@ -41,6 +44,9 @@ const storage = new Storage({ dag, faucet, autoSaveInterval: 30000 });
 let marketplace; // initialized after DAG loads
 let contracts;   // initialized after DAG loads
 let orchestrator; // initialized after DAG loads
+let tokenManager; // initialized after DAG loads
+let batchProcessor; // initialized after DAG loads
+let encryption;  // initialized after DAG loads
 const rateLimiter = new RateLimiter();
 const p2p = new P2PSync({
   dag,
@@ -110,6 +116,15 @@ async function initialize() {
 
   // Initialize orchestrator
   orchestrator = new Orchestrator({ dag });
+
+  // Initialize token manager
+  tokenManager = new TokenManager({ dag });
+
+  // Initialize batch processor
+  batchProcessor = new BatchProcessor({ dag });
+
+  // Initialize encryption layer
+  encryption = new EncryptionLayer({ dag });
 }
 
 await initialize();
@@ -382,6 +397,38 @@ async function handleAPI(req, path, body) {
   if (method === 'GET' && path === '/api/v1/ratelimit/stats') {
     return { status: 200, data: rateLimiter.getStats() };
   }
+  // ---- Token Public Routes ----
+  if (method === 'GET' && path === '/api/v1/tokens') {
+    const params = Object.fromEntries(new URL(req.url, `http://localhost`).searchParams);
+    return { status: 200, data: tokenManager.listTokens(params) };
+  }
+  if (method === 'GET' && path === '/api/v1/tokens/stats') {
+    return { status: 200, data: tokenManager.getStats() };
+  }
+  if (method === 'GET' && path.startsWith('/api/v1/tokens/symbol/')) {
+    const symbol = path.split('/api/v1/tokens/symbol/')[1];
+    const token = tokenManager.getTokenBySymbol(symbol);
+    if (!token) return { status: 404, data: { error: 'Token not found' } };
+    return { status: 200, data: token };
+  }
+  if (method === 'GET' && path.match(/^\/api\/v1\/tokens\/[^/]+\/holders$/)) {
+    const tokenId = path.split('/api/v1/tokens/')[1].split('/holders')[0];
+    return { status: 200, data: tokenManager.getHolders(tokenId) };
+  }
+  if (method === 'GET' && path.match(/^\/api\/v1\/tokens\/[^/]+$/) && !path.includes('/symbol/') && !path.includes('/stats')) {
+    const tokenId = path.split('/api/v1/tokens/')[1];
+    const token = tokenManager.getToken(tokenId);
+    if (!token) return { status: 404, data: { error: 'Token not found' } };
+    return { status: 200, data: token };
+  }
+  // ---- Encryption Public Stats ----
+  if (method === 'GET' && path === '/api/v1/encryption/stats') {
+    return { status: 200, data: encryption.getStats() };
+  }
+  // ---- Batch Public Stats ----
+  if (method === 'GET' && path === '/api/v1/batch/stats') {
+    return { status: 200, data: batchProcessor.getStats() };
+  }
   if (method === 'GET' && path.startsWith('/api/v1/marketplace/listing/')) {
     const id = path.split('/api/v1/marketplace/listing/')[1];
     const listing = marketplace.getListing(id);
@@ -653,8 +700,91 @@ async function handleAPI(req, path, body) {
     } catch (e) { return { status: 400, data: { error: e.message } }; }
   }
 
-  // ---- Public Stats Routes (no auth) for contracts/orchestrator ----
-  // (handled above in public section for /api/v1/contracts/stats and /api/v1/orchestrator/stats)
+  // ---- Token Auth Routes ----
+  if (method === 'POST' && path === '/api/v1/tokens/create') {
+    try {
+      const tips = dag.selectTips();
+      const result = tokenManager.createToken(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/tokens/transfer') {
+    try {
+      const tips = dag.selectTips();
+      const result = tokenManager.transfer(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/tokens/mint') {
+    try {
+      const tips = dag.selectTips();
+      const result = tokenManager.mint(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/tokens/burn') {
+    try {
+      const tips = dag.selectTips();
+      const result = tokenManager.burn(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'GET' && path === '/api/v1/tokens/my') {
+    return { status: 200, data: tokenManager.getBalances(session.wallet.address) };
+  }
+
+  // ---- Batch Transaction Routes ----
+  if (method === 'POST' && path === '/api/v1/batch/send') {
+    try {
+      const tips = dag.selectTips();
+      const result = batchProcessor.executeBatch(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'GET' && path.startsWith('/api/v1/batch/')) {
+    const batchId = path.split('/api/v1/batch/')[1];
+    if (batchId === 'my') {
+      return { status: 200, data: batchProcessor.getBatchesBySender(session.wallet.address) };
+    }
+    const batch = batchProcessor.getBatch(batchId);
+    if (!batch) return { status: 404, data: { error: 'Batch not found' } };
+    return { status: 200, data: batch };
+  }
+
+  // ---- Encryption Routes ----
+  if (method === 'POST' && path === '/api/v1/encryption/register') {
+    try {
+      const tips = dag.selectTips();
+      const result = encryption.registerKey(session.wallet, tips);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/encryption/send') {
+    try {
+      const tips = dag.selectTips();
+      const result = encryption.sendEncrypted(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/encryption/send-group') {
+    try {
+      const tips = dag.selectTips();
+      const result = encryption.sendEncryptedGroup(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/encryption/decrypt') {
+    try {
+      const result = encryption.decryptMessage(session.wallet, body.messageId);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'GET' && path === '/api/v1/encryption/inbox') {
+    return { status: 200, data: encryption.getInbox(session.wallet.address) };
+  }
+  if (method === 'GET' && path === '/api/v1/encryption/sent') {
+    return { status: 200, data: encryption.getSent(session.wallet.address) };
+  }
 
   return { status: 404, data: { error: 'Not found' } };
 }
