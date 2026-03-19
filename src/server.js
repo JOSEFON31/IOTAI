@@ -86,6 +86,12 @@ async function initialize() {
 
   // Initialize marketplace index
   marketplace = new Marketplace({ dag });
+
+  // Seed demo marketplace listings if empty
+  if (marketplace.listings.size === 0 && wallets.length > 0) {
+    const tips = dag.selectTips();
+    marketplace.seedDemoData(wallets[0], tips);
+  }
 }
 
 await initialize();
@@ -285,6 +291,18 @@ async function handleAPI(req, path, body) {
     if (!listing) return { status: 404, data: { error: 'Listing not found' } };
     return { status: 200, data: listing };
   }
+  if (method === 'GET' && path === '/api/v1/marketplace/featured') {
+    return { status: 200, data: marketplace.getFeatured(6) };
+  }
+  if (method === 'GET' && path.startsWith('/api/v1/marketplace/seller/')) {
+    const addr = path.split('/api/v1/marketplace/seller/')[1];
+    const profile = marketplace.getSellerProfile(addr);
+    if (!profile) return { status: 404, data: { error: 'Seller not found' } };
+    return { status: 200, data: profile };
+  }
+  if (method === 'GET' && path === '/api/v1/marketplace/top-sellers') {
+    return { status: 200, data: marketplace.getTopSellers(10) };
+  }
 
   // Auth required
   const session = authenticate(req);
@@ -354,6 +372,31 @@ async function handleAPI(req, path, body) {
     }
   if (method === 'GET' && path === '/api/v1/marketplace/my/purchases') {
     return { status: 200, data: marketplace.getPurchases(session.wallet.address) };
+  }
+  // Dispute routes
+  if (method === 'POST' && path === '/api/v1/marketplace/dispute/open') {
+    try {
+      const tips = dag.selectTips();
+      const result = marketplace.openDispute(session.wallet, tips, body);
+      return { status: 201, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/marketplace/dispute/respond') {
+    try {
+      const tips = dag.selectTips();
+      const result = marketplace.respondDispute(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/marketplace/dispute/resolve') {
+    try {
+      const tips = dag.selectTips();
+      const result = marketplace.resolveDispute(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'GET' && path === '/api/v1/marketplace/my/disputes') {
+    return { status: 200, data: marketplace.getDisputes(session.wallet.address) };
   }
 
   return { status: 404, data: { error: 'Not found' } };
