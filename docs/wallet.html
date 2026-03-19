@@ -485,7 +485,8 @@ async function runLivenessDetection() {
   canvas.width = video.videoWidth || 640;
   canvas.height = video.videoHeight || 480;
 
-  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+  // Lower scoreThreshold = easier detection, higher inputSize = more accurate
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.15 });
 
   // Liveness state machine
   let state = {
@@ -494,11 +495,11 @@ async function runLivenessDetection() {
     actionDone: false,
     framesWithFace: 0,
     framesWithoutFace: 0,
-    neutralExpression: null,    // baseline expression scores
-    actionFrames: 0,            // frames where action was detected
-    requiredActionFrames: 3,    // need 3 frames of the action to confirm
-    descriptor: null,           // 128-dim face embedding
-    baselineLandmarks: null,    // for head movement detection
+    neutralExpression: null,
+    actionFrames: 0,
+    requiredActionFrames: 2,    // only need 2 frames to confirm (was 3)
+    descriptor: null,
+    baselineLandmarks: null,
   };
 
   setStep('face', 'active');
@@ -532,8 +533,8 @@ async function runLivenessDetection() {
       ctx.font = '12px monospace';
       ctx.fillText((result.detection.score * 100).toFixed(0) + '%', box.x, box.y - 5);
 
-      // Step 1: Face detected (need 5 stable frames)
-      if (!state.faceDetected && state.framesWithFace >= 5) {
+      // Step 1: Face detected (need 3 stable frames)
+      if (!state.faceDetected && state.framesWithFace >= 3) {
         state.faceDetected = true;
         setStep('face', 'done');
         setStep('center', 'active');
@@ -549,7 +550,7 @@ async function runLivenessDetection() {
         const offX = Math.abs(centerX - vidCenterX) / canvas.width;
         const offY = Math.abs(centerY - vidCenterY) / canvas.height;
 
-        if (offX < 0.15 && offY < 0.2 && box.width > canvas.width * 0.2) {
+        if (offX < 0.25 && offY < 0.3 && box.width > canvas.width * 0.12) {
           state.faceCentered = true;
           state.neutralExpression = { ...result.faceExpressions };
           state.baselineLandmarks = result.faceLandmarks;
@@ -569,8 +570,8 @@ async function runLivenessDetection() {
         let actionDetected = false;
 
         if (action === 'smile') {
-          actionDetected = expr.happy > 0.7;
-          setDetail(`Smile confidence: ${(expr.happy * 100).toFixed(0)}% (need 70%)`);
+          actionDetected = expr.happy > 0.4;
+          setDetail(`Smile confidence: ${(expr.happy * 100).toFixed(0)}% (need 40%)`);
         } else if (action === 'blink') {
           // Detect eyes closed via landmarks - eye aspect ratio
           const leftEye = landmarks.getLeftEye();
@@ -578,8 +579,8 @@ async function runLivenessDetection() {
           const leftEAR = eyeAspectRatio(leftEye);
           const rightEAR = eyeAspectRatio(rightEye);
           const avgEAR = (leftEAR + rightEAR) / 2;
-          actionDetected = avgEAR < 0.21;
-          setDetail(`Eye openness: ${(avgEAR * 100).toFixed(0)}% (close eyes below 21%)`);
+          actionDetected = avgEAR < 0.25;
+          setDetail(`Eye openness: ${(avgEAR * 100).toFixed(0)}% (close eyes below 25%)`);
         } else if (action === 'turn_left' || action === 'turn_right') {
           const nose = landmarks.getNose();
           const jaw = landmarks.getJawOutline();
@@ -589,19 +590,19 @@ async function runLivenessDetection() {
           const faceWidth = faceRight - faceLeft;
           const noseRatio = (noseX - faceLeft) / faceWidth;
           if (action === 'turn_left') {
-            actionDetected = noseRatio < 0.35;
-            setDetail(`Head position: ${(noseRatio * 100).toFixed(0)}% (turn left past 35%)`);
+            actionDetected = noseRatio < 0.4;
+            setDetail(`Head position: ${(noseRatio * 100).toFixed(0)}% (turn left past 40%)`);
           } else {
-            actionDetected = noseRatio > 0.65;
-            setDetail(`Head position: ${(noseRatio * 100).toFixed(0)}% (turn right past 65%)`);
+            actionDetected = noseRatio > 0.6;
+            setDetail(`Head position: ${(noseRatio * 100).toFixed(0)}% (turn right past 60%)`);
           }
         } else if (action === 'nod') {
           const nose = landmarks.getNose();
           const noseY = nose[3].y;
           const boxTop = box.y;
           const relY = (noseY - boxTop) / box.height;
-          actionDetected = relY > 0.6;
-          setDetail(`Head tilt: ${(relY * 100).toFixed(0)}% (nod down past 60%)`);
+          actionDetected = relY > 0.55;
+          setDetail(`Head tilt: ${(relY * 100).toFixed(0)}% (nod down past 55%)`);
         }
 
         if (actionDetected) {

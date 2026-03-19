@@ -193,13 +193,14 @@ export class Faucet {
       return { success: false, error: 'This face has already been registered. Each person can only claim once.' };
     }
 
-    // 9. Cosine similarity check (threshold 0.4 = very strict for face-api.js)
-    // Same person typically scores 0.7-0.95, different people score 0.1-0.4
+    // 9. Cosine similarity check against stored embeddings
+    // face-api.js 128-dim: same person = 0.6-0.95, different people = 0.0-0.5
+    // Threshold 0.6 blocks same person, allows different people
     let maxSimilarity = 0;
     for (const stored of this.storedEmbeddings) {
       const similarity = cosineSimilarity(faceEmbedding, stored);
       maxSimilarity = Math.max(maxSimilarity, similarity);
-      if (similarity > 0.4) {
+      if (similarity > 0.6) {
         return { success: false, error: `Face too similar to an existing registration (${(similarity * 100).toFixed(0)}% match). Each person can only claim once.` };
       }
     }
