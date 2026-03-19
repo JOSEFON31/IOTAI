@@ -86,7 +86,7 @@ if (!loaded) {
 storage.start();
 
 // ---- Visualizer HTML builder ----
-function buildVisualizerHTML() {
+function buildVisualizerData() {
   const agentAddresses = {};
   for (const a of demoAgents) agentAddresses[a.wallet.address] = { name: a.name, color: a.color };
 
