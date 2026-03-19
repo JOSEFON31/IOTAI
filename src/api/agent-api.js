@@ -19,6 +19,7 @@ import { fileURLToPath } from 'url';
 import { Wallet } from '../wallet/wallet.js';
 import { hash, generateNonce } from '../core/crypto.js';
 import { Faucet } from '../core/faucet.js';
+import { IOTAIWebSocket } from './websocket.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DOCS_DIR = resolve(__dirname, '../../docs');
@@ -46,6 +47,9 @@ export class AgentAPI {
     // SSE clients for real-time events
     /** @type {Set<import('http').ServerResponse>} */
     this.sseClients = new Set();
+
+    // WebSocket API (initialized on start)
+    this.wsApi = null;
 
     // Token TTL: 1 hour
     this.tokenTTL = 60 * 60 * 1000;
@@ -94,6 +98,17 @@ export class AgentAPI {
       this.server.listen(this.apiPort, () => {
         console.log(`[IOTAI API] Agent API running on http://localhost:${this.apiPort}`);
         this._setupSSEEvents();
+
+        // Attach WebSocket API
+        this.wsApi = new IOTAIWebSocket({
+          server: this.server,
+          dag: this.dag,
+          sessions: this.sessions,
+          node: this.node,
+          validator: this.validator,
+        });
+        console.log(`[IOTAI API] WebSocket available at ws://localhost:${this.apiPort}/ws`);
+
         resolve();
       });
     });

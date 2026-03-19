@@ -32,6 +32,7 @@
     "libp2p": "^1.4.0",
     "multiformats": "^13.0.0",
     "tweetnacl": "^1.0.3",
-    "uint8arrays": "^5.0.0"
+    "uint8arrays": "^5.0.0",
+    "ws": "^8.19.0"
   }
 }

@@ -176,6 +176,7 @@
     <a href="#how-it-works">How It Works</a>
     <a href="#tokenomics">Tokenomics</a>
     <a href="#api">API</a>
+    <a href="#websocket" style="color:#0984E3">WebSocket</a>
     <a href="#faucet">Get Tokens</a>
     <a href="/wallet.html" style="color:#00B894;font-weight:bold">Wallet</a>
     <a href="#cli">CLI Wallet</a>
@@ -280,6 +281,11 @@
       <div class="icon">&#128737;</div>
       <h4>Quantum-Resistant Security</h4>
       <p>Ed25519 signatures, BLAKE3 hashing, unique nonces per transaction, replay attack protection. Private keys never leave your device.</p>
+    </div>
+    <div class="card">
+      <div class="icon">&#9889;</div>
+      <h4>WebSocket API</h4>
+      <p>Bidirectional real-time communication. AI agents connect once and can authenticate, subscribe to events, send payments, and query data — all over a single persistent connection.</p>
     </div>
     <div class="card">
       <div class="icon">&#128187;</div>
@@ -563,6 +569,102 @@ events.addEventListener(<span class="str">'sync'</span>, (e) => {
   <span class="kw">const</span> { imported, totalTransactions } = JSON.parse(e.data);
   console.log(<span class="str">`Synced ${imported} txs (${totalTransactions} total)`</span>);
 });</code></pre>
+
+  <h3 id="websocket">WebSocket API (Bidirectional Real-Time)</h3>
+  <p style="color:var(--muted);margin-bottom:16px">Full duplex communication for AI agents. Connect once, subscribe to channels, execute commands, and receive events — all over a single persistent connection.</p>
+
+  <p style="color:var(--muted);margin-bottom:8px"><strong>Endpoint:</strong> <code>ws://your-node:8080/ws</code></p>
+
+  <table>
+    <tr><th>Client Message</th><th>Description</th></tr>
+    <tr>
+      <td><code>{ type: "auth", token: "..." }</code></td>
+      <td>Authenticate with an ephemeral token. Required for transfer/balance/history.</td>
+    </tr>
+    <tr>
+      <td><code>{ type: "subscribe", channels: [...] }</code></td>
+      <td>Subscribe to event channels: <code>transactions</code>, <code>confirmations</code>, <code>peers</code>, <code>sync</code>, <code>data</code></td>
+    </tr>
+    <tr>
+      <td><code>{ type: "unsubscribe", channels: [...] }</code></td>
+      <td>Unsubscribe from channels.</td>
+    </tr>
+    <tr>
+      <td><code>{ type: "transfer", to: "addr", amount: N }</code></td>
+      <td>Send IOTAI (requires auth). Optional: <code>metadata</code></td>
+    </tr>
+    <tr>
+      <td><code>{ type: "balance" }</code></td>
+      <td>Get wallet balance (requires auth).</td>
+    </tr>
+    <tr>
+      <td><code>{ type: "history" }</code></td>
+      <td>Get transaction history (requires auth).</td>
+    </tr>
+    <tr>
+      <td><code>{ type: "stats" }</code></td>
+      <td>Get network statistics (public).</td>
+    </tr>
+    <tr>
+      <td><code>{ type: "ping" }</code></td>
+      <td>Latency check. Server responds with <code>pong</code>.</td>
+    </tr>
+  </table>
+
+  <h3>Example: WebSocket Agent</h3>
+  <pre><code><span class="cm">// Connect to WebSocket</span>
+<span class="kw">const</span> ws = <span class="kw">new</span> WebSocket(<span class="str">'ws://localhost:8080/ws'</span>);
+
+ws.onopen = () => {
+  <span class="cm">// 1. Authenticate</span>
+  ws.send(JSON.stringify({ type: <span class="str">'auth'</span>, token: <span class="str">'your-token-here'</span> }));
+
+  <span class="cm">// 2. Subscribe to transaction events</span>
+  ws.send(JSON.stringify({
+    type: <span class="str">'subscribe'</span>,
+    channels: [<span class="str">'transactions'</span>, <span class="str">'peers'</span>]
+  }));
+};
+
+ws.onmessage = (msg) => {
+  <span class="kw">const</span> { event, data } = JSON.parse(msg.data);
+
+  <span class="kw">switch</span> (event) {
+    <span class="kw">case</span> <span class="str">'authenticated'</span>:
+      console.log(<span class="str">`Logged in as ${data.address}, balance: ${data.balance}`</span>);
+      <span class="cm">// 3. Send a payment over WebSocket</span>
+      ws.send(JSON.stringify({
+        type: <span class="str">'transfer'</span>,
+        to: <span class="str">'iotai_recipient_address'</span>,
+        amount: <span class="num">50</span>,
+        metadata: { purpose: <span class="str">'WebSocket payment'</span> }
+      }));
+      <span class="kw">break</span>;
+
+    <span class="kw">case</span> <span class="str">'transfer:complete'</span>:
+      console.log(<span class="str">`Payment sent! TX: ${data.txId}`</span>);
+      <span class="kw">break</span>;
+
+    <span class="kw">case</span> <span class="str">'transaction'</span>:
+      console.log(<span class="str">`New tx: ${data.from} -> ${data.to} (${data.amount} IOTAI)`</span>);
+      <span class="kw">break</span>;
+
+    <span class="kw">case</span> <span class="str">'peer:connect'</span>:
+      console.log(<span class="str">`Peer joined! Total: ${data.totalPeers}`</span>);
+      <span class="kw">break</span>;
+  }
+};</code></pre>
+
+  <h3>WebSocket vs SSE</h3>
+  <table>
+    <tr><th>Feature</th><th>WebSocket <code>/ws</code></th><th>SSE <code>/api/v1/events</code></th></tr>
+    <tr><td>Direction</td><td>Bidirectional</td><td>Server-to-client only</td></tr>
+    <tr><td>Send commands</td><td>Yes (transfer, balance, etc.)</td><td>No (separate HTTP calls)</td></tr>
+    <tr><td>Channel subscriptions</td><td>Yes (per-client)</td><td>No (all events)</td></tr>
+    <tr><td>Authentication</td><td>In-band (auth message)</td><td>Not required</td></tr>
+    <tr><td>Reconnection</td><td>Manual</td><td>Automatic (built-in)</td></tr>
+    <tr><td>Best for</td><td>AI agents, bots, complex flows</td><td>Dashboards, monitoring</td></tr>
+  </table>
 </section>
 
 <!-- CLI WALLET -->

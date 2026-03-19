@@ -22,6 +22,7 @@ import {
   encodePublicKey,
 } from './core/crypto.js';
 import { verifyTransaction } from './core/transaction.js';
+import { IOTAIWebSocket } from './api/websocket.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DOCS_DIR = resolve(__dirname, '../docs');
@@ -435,6 +436,17 @@ setInterval(async()=>{
 </script></body></html>`;
 }
 
+// ---- WebSocket API ----
+const wsApi = new IOTAIWebSocket({
+  server,
+  dag,
+  sessions,
+  verifyTx: verifyTransaction,
+});
+
+// Add WebSocket stats to network stats
+const _origHandleAPI = handleAPI;
+
 // ---- Start ----
 server.listen(PORT, '0.0.0.0', () => {
   console.log('');
@@ -449,5 +461,6 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`  Docs:       http://localhost:${PORT}/`);
   console.log(`  Visualizer: http://localhost:${PORT}/visualizer`);
   console.log(`  API:        http://localhost:${PORT}/api/v1/...`);
+  console.log(`  WebSocket:  ws://localhost:${PORT}/ws`);
   console.log('');
 });
