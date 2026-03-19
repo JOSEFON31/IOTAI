@@ -145,6 +145,8 @@
       <div class="faucet-stat"><div class="num" id="fs-per-person">-</div><div class="lbl">Per Person</div></div>
       <div class="faucet-stat"><div class="num" id="fs-pct">-</div><div class="lbl">% Distributed</div></div>
     </div>
+    <input type="text" id="create-passphrase" placeholder="Choose a secret passphrase (this is your key!)"
+      style="width:100%;padding:12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;margin-bottom:12px">
     <button class="btn" onclick="createWallet()">Create My Wallet</button>
   </div>
 
@@ -153,9 +155,10 @@
     <h2><span class="step-num">2</span> Your Wallet</h2>
     <div class="wallet-info" id="wallet-display">
       <div class="row"><div class="label">Address</div><div class="value" id="w-address">-</div></div>
+      <div class="row"><div class="label">Passphrase</div><div class="value" id="w-passphrase">-</div></div>
       <div class="row"><div class="label">Auth Token</div><div class="value" id="w-token">-</div></div>
     </div>
-    <div class="status info">Save your wallet info! You'll need the token to access your funds later.</div>
+    <div class="status info">IMPORTANT: Save your passphrase! It's the only way to recover your wallet and funds.</div>
     <button class="btn green" onclick="startVerification()" style="margin-top:12px">Verify My Identity</button>
   </div>
 
@@ -189,6 +192,9 @@
   <div class="step" id="login-panel" style="display:none;margin-top:16px">
     <h2><span class="step-num">?</span> Check Balance</h2>
     <input type="text" id="login-passphrase" placeholder="Enter your passphrase"
+      style="width:100%;padding:12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;margin-bottom:8px">
+    <p style="color:var(--muted);font-size:12px;margin-bottom:8px;text-align:center">- or -</p>
+    <input type="text" id="login-token" placeholder="Enter your auth token"
       style="width:100%;padding:12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;margin-bottom:12px">
     <button class="btn" onclick="checkBalance()">Check Balance</button>
     <div id="balance-result" style="margin-top:12px"></div>
@@ -234,10 +240,22 @@ function goToStep(n) {
 
 // ---- Step 1 -> 2: Create wallet ----
 async function createWallet() {
+  const passphrase = document.getElementById('create-passphrase').value.trim();
+  if (!passphrase || passphrase.length < 6) {
+    alert('Please enter a passphrase with at least 6 characters. This is your key to recover your wallet!');
+    return;
+  }
+
   try {
-    const res = await fetch(API + '/api/v1/wallet/create', { method: 'POST' });
+    const res = await fetch(API + '/api/v1/wallet/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passphrase }),
+    });
     walletData = await res.json();
+    walletData.passphrase = passphrase;
     document.getElementById('w-address').textContent = walletData.address;
+    document.getElementById('w-passphrase').textContent = passphrase;
     document.getElementById('w-token').textContent = walletData.token.substring(0, 20) + '...';
     goToStep(2);
   } catch (e) {
@@ -344,9 +362,10 @@ async function captureAndClaim() {
         <div class="status success">${result.message}</div>
         <div class="wallet-info" style="margin-top:16px">
           <div class="row"><div class="label">Your Address</div><div class="value">${walletData.address}</div></div>
+          <div class="row"><div class="label">Your Passphrase (SAVE THIS!)</div><div class="value" style="color:#E17055;font-size:15px">${walletData.passphrase}</div></div>
           <div class="row"><div class="label">Recipient #</div><div class="value">${result.recipientNumber}</div></div>
-          <div class="row"><div class="label">Auth Token (save this!)</div><div class="value">${walletData.token}</div></div>
         </div>
+        <div class="status info" style="margin-top:8px">Your passphrase is the ONLY way to access your wallet. Write it down and keep it safe!</div>
         <button class="btn green" onclick="window.location.href='/visualizer'" style="margin-top:16px">View the Tangle</button>
       `;
     } else {
@@ -374,27 +393,42 @@ function showLogin() {
 
 async function checkBalance() {
   const passphrase = document.getElementById('login-passphrase').value.trim();
-  if (!passphrase) return;
+  const token = document.getElementById('login-token').value.trim();
+
+  if (!passphrase && !token) {
+    alert('Enter your passphrase or auth token');
+    return;
+  }
 
   try {
-    // Get token
-    const authRes = await fetch(API + '/api/v1/auth/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ passphrase }),
-    });
-    const auth = await authRes.json();
+    let authToken = token;
+
+    // If passphrase provided, get a token first
+    if (passphrase) {
+      const authRes = await fetch(API + '/api/v1/auth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passphrase }),
+      });
+      const auth = await authRes.json();
+      authToken = auth.token;
+    }
 
     // Get balance
     const balRes = await fetch(API + '/api/v1/balance', {
-      headers: { 'Authorization': 'Bearer ' + auth.token },
+      headers: { 'Authorization': 'Bearer ' + authToken },
     });
     const bal = await balRes.json();
+
+    if (bal.error) {
+      document.getElementById('balance-result').innerHTML = `<div class="status error">${bal.error}</div>`;
+      return;
+    }
 
     document.getElementById('balance-result').innerHTML = `
       <div class="wallet-info">
         <div class="row"><div class="label">Address</div><div class="value">${bal.address}</div></div>
-        <div class="row"><div class="label">Balance</div><div class="value" style="font-size:18px">${bal.balance.toLocaleString()} IOTAI</div></div>
+        <div class="row"><div class="label">Balance</div><div class="value" style="font-size:18px;color:#00B894">${bal.balance.toLocaleString()} IOTAI</div></div>
       </div>
     `;
   } catch (e) {
