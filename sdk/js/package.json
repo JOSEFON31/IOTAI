@@ -1,0 +1,28 @@
+{
+  "name": "iotai-sdk",
+  "version": "1.0.0",
+  "description": "JavaScript SDK for IOTAI - DAG cryptocurrency for AI agents",
+  "main": "index.js",
+  "type": "module",
+  "exports": {
+    ".": "./index.js"
+  },
+  "keywords": ["iotai", "cryptocurrency", "dag", "ai-agents", "payments", "sdk"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JOSEFON31/IOTAI.git",
+    "directory": "sdk/js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "peerDependencies": {
+    "ws": ">=8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "ws": {
+      "optional": true
+    }
+  }
+}

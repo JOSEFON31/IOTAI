@@ -26,6 +26,8 @@ import { verifyTransaction } from './core/transaction.js';
 import { IOTAIWebSocket } from './api/websocket.js';
 import { Marketplace } from './marketplace/marketplace.js';
 import { P2PSync } from './network/p2p.js';
+import { ContractEngine } from './contracts/engine.js';
+import { Orchestrator } from './orchestrator/orchestrator.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DOCS_DIR = resolve(__dirname, '../docs');
@@ -36,6 +38,8 @@ const dag = new DAG();
 const faucet = new Faucet(dag);
 const storage = new Storage({ dag, faucet, autoSaveInterval: 30000 });
 let marketplace; // initialized after DAG loads
+let contracts;   // initialized after DAG loads
+let orchestrator; // initialized after DAG loads
 const p2p = new P2PSync({
   dag,
   nodeUrl: process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`,
@@ -98,6 +102,12 @@ async function initialize() {
     const tips = dag.selectTips();
     marketplace.seedDemoData(demoAgents[0].wallet, tips);
   }
+
+  // Initialize smart contracts engine
+  contracts = new ContractEngine({ dag });
+
+  // Initialize orchestrator
+  orchestrator = new Orchestrator({ dag });
 }
 
 await initialize();
@@ -105,12 +115,18 @@ await initialize();
 // Start P2P sync
 p2p.start();
 
-// Process expired escrows every 5 minutes
+// Process expired escrows and task timeouts every 5 minutes
 setInterval(() => {
   if (marketplace) {
     const result = marketplace.processExpiredEscrows();
     if (result.released > 0) {
       console.log(`[Escrow] Auto-released ${result.released} expired escrow(s)`);
+    }
+  }
+  if (orchestrator) {
+    const result = orchestrator.processTimeouts();
+    if (result.timedOut > 0) {
+      console.log(`[Orchestrator] ${result.timedOut} task(s) timed out and reopened`);
     }
   }
 }, 5 * 60 * 1000);
@@ -326,6 +342,15 @@ async function handleAPI(req, path, body) {
   if (method === 'GET' && path === '/api/v1/marketplace/stats') {
     return { status: 200, data: marketplace.getStats() };
   }
+  if (method === 'GET' && path === '/api/v1/contracts/stats') {
+    return { status: 200, data: contracts.getStats() };
+  }
+  if (method === 'GET' && path === '/api/v1/orchestrator/stats') {
+    return { status: 200, data: orchestrator.getStats() };
+  }
+  if (method === 'GET' && path === '/api/v1/orchestrator/workers') {
+    return { status: 200, data: orchestrator.getWorkers() };
+  }
   if (method === 'GET' && path.startsWith('/api/v1/marketplace/listing/')) {
     const id = path.split('/api/v1/marketplace/listing/')[1];
     const listing = marketplace.getListing(id);
@@ -357,14 +382,17 @@ async function handleAPI(req, path, body) {
     if (!v.valid) return { status: 400, data: { error: v.error } };
     const r = dag.addTransaction(tx);
     if (!r.success) return { status: 400, data: { error: r.error } };
-    return { status: 200, data: { txId: tx.id, from: tx.from, to: tx.to, amount: tx.amount, fee: tx.fee || 0, status: 'confirmed' } };
+    // Evaluate smart contracts
+    const triggered = contracts.evaluate(tx);
+    return { status: 200, data: { txId: tx.id, from: tx.from, to: tx.to, amount: tx.amount, fee: tx.fee || 0, status: 'confirmed', contractsTriggered: triggered.length } };
   }
   if (method === 'POST' && path === '/api/v1/data') {
     if (!body?.metadata) return { status: 400, data: { error: 'Required: metadata' } };
     const tips = dag.selectTips();
     const tx = session.wallet.sendData(tips, body.metadata);
     dag.addTransaction(tx);
-    return { status: 200, data: { txId: tx.id, metadata: tx.metadata } };
+    const triggered = contracts.evaluate(tx);
+    return { status: 200, data: { txId: tx.id, metadata: tx.metadata, contractsTriggered: triggered.length } };
   }
   if (method === 'GET' && path === '/api/v1/balance') {
     return { status: 200, data: { address: session.wallet.address, balance: dag.getBalance(session.wallet.address), unit: 'IOTAI' } };
@@ -497,6 +525,105 @@ async function handleAPI(req, path, body) {
   if (method === 'GET' && path === '/api/v1/p2p/state') {
     return { status: 200, data: p2p.getStateDigest() };
   }
+
+  // ---- Smart Contract Routes ----
+  if (method === 'POST' && path === '/api/v1/contracts/deploy') {
+    try {
+      const tips = dag.selectTips();
+      const result = contracts.deploy(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'GET' && path.startsWith('/api/v1/contracts/my')) {
+    return { status: 200, data: contracts.getContractsByOwner(session.wallet.address) };
+  }
+  if (method === 'GET' && path.match(/^\/api\/v1\/contracts\/[^/]+$/) && !path.includes('/my')) {
+    const contractId = path.split('/api/v1/contracts/')[1];
+    const contract = contracts.getContract(contractId);
+    if (!contract) return { status: 404, data: { error: 'Contract not found' } };
+    return { status: 200, data: contract };
+  }
+  if (method === 'POST' && path === '/api/v1/contracts/pause') {
+    try {
+      const result = contracts.pause(session.wallet, body.contractId);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/contracts/resume') {
+    try {
+      const result = contracts.resume(session.wallet, body.contractId);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/contracts/cancel') {
+    try {
+      const result = contracts.cancel(session.wallet, body.contractId);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+
+  // ---- Orchestrator Routes ----
+  if (method === 'POST' && path === '/api/v1/orchestrator/pipeline') {
+    try {
+      const tips = dag.selectTips();
+      const result = orchestrator.createPipeline(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'GET' && path.startsWith('/api/v1/orchestrator/pipeline/')) {
+    const pipelineId = path.split('/api/v1/orchestrator/pipeline/')[1];
+    const pipeline = orchestrator.getPipeline(pipelineId);
+    if (!pipeline) return { status: 404, data: { error: 'Pipeline not found' } };
+    return { status: 200, data: pipeline };
+  }
+  if (method === 'GET' && path === '/api/v1/orchestrator/my/pipelines') {
+    return { status: 200, data: orchestrator.getPipelinesByOwner(session.wallet.address) };
+  }
+  if (method === 'POST' && path === '/api/v1/orchestrator/pipeline/cancel') {
+    try {
+      const result = orchestrator.cancelPipeline(session.wallet, body.pipelineId);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/orchestrator/worker/register') {
+    try {
+      const tips = dag.selectTips();
+      const result = orchestrator.registerWorker(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'GET' && path === '/api/v1/orchestrator/tasks/available') {
+    return { status: 200, data: orchestrator.getAvailableTasks(session.wallet.address) };
+  }
+  if (method === 'POST' && path === '/api/v1/orchestrator/task/claim') {
+    try {
+      const tips = dag.selectTips();
+      const result = orchestrator.claimTask(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/orchestrator/task/submit') {
+    try {
+      const tips = dag.selectTips();
+      const result = orchestrator.submitResult(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/orchestrator/task/approve') {
+    try {
+      const result = orchestrator.approveTask(session.wallet, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/orchestrator/task/reject') {
+    try {
+      const result = orchestrator.rejectTask(session.wallet, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+
+  // ---- Public Stats Routes (no auth) for contracts/orchestrator ----
+  // (handled above in public section for /api/v1/contracts/stats and /api/v1/orchestrator/stats)
 
   return { status: 404, data: { error: 'Not found' } };
 }
