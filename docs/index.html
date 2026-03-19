@@ -178,6 +178,7 @@
     <a href="#api">API</a>
     <a href="#faucet">Get Tokens</a>
     <a href="/wallet.html" style="color:#00B894;font-weight:bold">Wallet</a>
+    <a href="#cli">CLI Wallet</a>
     <a href="#run">Run a Node</a>
   </div>
 </nav>
@@ -275,6 +276,11 @@
       <div class="icon">&#128737;</div>
       <h4>Quantum-Resistant Security</h4>
       <p>Ed25519 signatures, BLAKE3 hashing, unique nonces per transaction, replay attack protection. Private keys never leave your device.</p>
+    </div>
+    <div class="card">
+      <div class="icon">&#128187;</div>
+      <h4>Wallet CLI</h4>
+      <p>Full-featured command-line wallet. Create, restore, send, and check balances from your terminal. Supports BIP39 seed phrases and HD key derivation.</p>
     </div>
   </div>
 </section>
@@ -504,6 +510,65 @@ Response: { success: true, amount: 1000, message: "Welcome to IOTAI!" }</code></
 console.log(result.txId); <span class="cm">// Transaction confirmed!</span></code></pre>
 </section>
 
+<!-- CLI WALLET -->
+<section id="cli">
+  <h2>Wallet CLI</h2>
+  <p>Manage your IOTAI wallet from the command line. No browser needed.</p>
+
+  <h3>Commands</h3>
+  <table>
+    <tr><th>Command</th><th>Description</th></tr>
+    <tr>
+      <td><code>npm run wallet create</code></td>
+      <td>Create a new wallet with a 12-word seed phrase</td>
+    </tr>
+    <tr>
+      <td><code>npm run wallet restore</code></td>
+      <td>Restore a wallet from your seed phrase</td>
+    </tr>
+    <tr>
+      <td><code>npm run wallet balance</code></td>
+      <td>Check your wallet balance</td>
+    </tr>
+    <tr>
+      <td><code>npm run wallet -- send &lt;address&gt; &lt;amount&gt;</code></td>
+      <td>Send IOTAI to another address</td>
+    </tr>
+    <tr>
+      <td><code>npm run wallet history</code></td>
+      <td>View your transaction history</td>
+    </tr>
+    <tr>
+      <td><code>npm run wallet info</code></td>
+      <td>Show wallet details (address, public key, etc.)</td>
+    </tr>
+  </table>
+
+  <h3>Example: Create and Send</h3>
+  <pre><code><span class="cm"># Create a new wallet</span>
+$ npm run wallet create
+
+┌──────────────────────────────────────────────────────────┐
+│  New IOTAI Wallet                                        │
+├──────────────────────────────────────────────────────────┤
+│  Address:     iotai_89b65a5c61e8c036...                  │
+│                                                          │
+│  SEED PHRASE (write this down!):                         │
+│    carpet famous jazz rack owner grow black depth ...    │
+└──────────────────────────────────────────────────────────┘
+
+<span class="cm"># Check balance</span>
+$ npm run wallet balance
+
+<span class="cm"># Send 500 IOTAI</span>
+$ npm run wallet -- send iotai_recipient_address 500</code></pre>
+
+  <h3>Configuration</h3>
+  <p style="color:var(--muted)">Set the <code>IOTAI_API</code> environment variable to point to your node. Default: <code>http://localhost:8080</code></p>
+  <pre><code><span class="cm"># Connect to a remote node</span>
+IOTAI_API=https://your-node.onrender.com npm run wallet balance</code></pre>
+</section>
+
 <!-- RUN A NODE -->
 <section id="run">
   <h2>Run a Node</h2>
@@ -511,8 +576,8 @@ console.log(result.txId); <span class="cm">// Transaction confirmed!</span></cod
 
   <h3>Quick Start</h3>
   <pre><code><span class="cm"># Clone the repository</span>
-git clone https://github.com/your-org/iotai.git
-cd iotai
+git clone https://github.com/JOSEFON31/IOTAI.git
+cd IOTAI
 
 <span class="cm"># Install dependencies</span>
 npm install
@@ -532,6 +597,10 @@ node src/index.js --peer /ip4/192.168.1.100/tcp/4001/p2p/QmPeerId...</code></pre
   <h3>Visualize the DAG</h3>
   <pre><code>node src/visualizer.js 3000
 <span class="cm"># Open http://localhost:3000 in your browser</span></code></pre>
+
+  <h3>Run Tests</h3>
+  <pre><code><span class="cm"># Run the full test suite (117 tests)</span>
+npm test</code></pre>
 </section>
 
 <footer>

@@ -116,9 +116,18 @@ export class Storage {
       this.dag.balances = new Map(Object.entries(state.balances).map(([k, v]) => [k, Number(v)]));
     }
 
-    // Restore nonces
+    // Restore nonces: merge saved nonce set with nonces from transactions
+    // This prevents replay attacks even if the saved nonce set was incomplete
     if (state.nonces) {
-      this.dag.usedNonces = new Set(state.nonces);
+      for (const n of state.nonces) {
+        this.dag.usedNonces.add(n);
+      }
+    }
+    // Belt-and-suspenders: ensure every transaction's nonce is tracked
+    for (const tx of this.dag.transactions.values()) {
+      if (tx.nonce) {
+        this.dag.usedNonces.add(tx.nonce);
+      }
     }
 
     // Restore faucet

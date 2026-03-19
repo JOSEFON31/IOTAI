@@ -236,16 +236,39 @@ export class DAG {
       this.transactions.set(genesis.id, genesis);
       this.children.set(genesis.id, new Set());
       this.genesisId = genesis.id;
+      this.tips.add(genesis.id);
       this.balances.set('iotai_genesis', genesis.amount);
+      if (genesis.nonce) this.usedNonces.add(genesis.nonce);
     }
 
-    // Then add all other transactions in timestamp order
+    // Add all other transactions in timestamp order
+    // Use direct insertion (like Storage._restoreState) to avoid
+    // balance re-validation failures on import
     const sorted = state.transactions
       .filter((tx) => tx.type !== 'genesis')
       .sort((a, b) => a.timestamp - b.timestamp);
 
     for (const tx of sorted) {
-      this.addTransaction(tx);
+      if (this.transactions.has(tx.id)) continue;
+
+      this.transactions.set(tx.id, tx);
+      this.children.set(tx.id, new Set());
+
+      for (const parentId of tx.parents) {
+        this.children.get(parentId)?.add(tx.id);
+        this.tips.delete(parentId);
+      }
+      this.tips.add(tx.id);
+
+      if (tx.nonce) this.usedNonces.add(tx.nonce);
+
+      // Update balances for transfers
+      if (tx.type === 'transfer') {
+        const senderBalance = this.balances.get(tx.from) || 0;
+        const recipientBalance = this.balances.get(tx.to) || 0;
+        this.balances.set(tx.from, senderBalance - tx.amount);
+        this.balances.set(tx.to, recipientBalance + tx.amount);
+      }
     }
   }
 

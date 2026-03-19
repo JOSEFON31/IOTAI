@@ -269,17 +269,9 @@ describe('DAG.exportState / importState', () => {
   });
 
   it('exports and imports state with transactions', () => {
-    // Use genesis-funded address so importState can re-validate transfers
-    const dag = new DAG();
-    dag.initialize(1_000_000_000);
-    const pair = generateKeyPair();
-    const address = publicKeyToAddress(pair.publicKey);
-
-    // Transfer from genesis to our wallet (simulate via direct balance manipulation)
-    dag.balances.set(address, 10_000);
-    dag.balances.set('iotai_genesis', 1_000_000_000 - 10_000);
-
+    const { dag, pair, address } = createFundedDAG();
     const tips = dag.selectTips();
+
     const tx = createTransaction({
       senderSecretKey: pair.secretKey,
       senderPublicKey: pair.publicKey,
@@ -290,17 +282,55 @@ describe('DAG.exportState / importState', () => {
     dag.addTransaction(tx);
 
     const state = dag.exportState();
-    const dag2 = new DAG();
 
-    // importState re-validates txs; we need the sender balance pre-set
-    // since importState only restores genesis balance
+    const dag2 = new DAG();
     dag2.importState(state);
-    // After import, genesis is set from genesis tx amount
-    // Transfer tx will fail validation because sender has no balance in dag2
-    // This is a known limitation of importState - it only reconstructs from genesis
-    // Verify at least genesis was imported correctly
+
+    // importState now uses direct insertion (no re-validation)
     assert.ok(dag2.getTransaction(dag.genesisId));
-    assert.equal(dag2.transactions.size >= 1, true);
+    assert.ok(dag2.getTransaction(tx.id));
+    assert.equal(dag2.transactions.size, 2);
+  });
+
+  it('importState restores nonces from all transactions', () => {
+    const { dag, pair } = createFundedDAG();
+    const tips = dag.selectTips();
+
+    const tx = createTransaction({
+      senderSecretKey: pair.secretKey,
+      senderPublicKey: pair.publicKey,
+      to: 'iotai_bob',
+      amount: 50,
+      parents: tips,
+    });
+    dag.addTransaction(tx);
+
+    const state = dag.exportState();
+    const dag2 = new DAG();
+    dag2.importState(state);
+
+    // Nonce from the transfer should be tracked
+    assert.ok(dag2.usedNonces.has(tx.nonce));
+  });
+
+  it('importState reconstructs balances from transfers', () => {
+    const { dag, pair, address } = createFundedDAG();
+    const tips = dag.selectTips();
+
+    const tx = createTransaction({
+      senderSecretKey: pair.secretKey,
+      senderPublicKey: pair.publicKey,
+      to: 'iotai_bob',
+      amount: 200,
+      parents: tips,
+    });
+    dag.addTransaction(tx);
+
+    const state = dag.exportState();
+    const dag2 = new DAG();
+    dag2.importState(state);
+
+    assert.equal(dag2.getBalance('iotai_bob'), 200);
   });
 });
 
