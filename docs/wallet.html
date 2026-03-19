@@ -150,7 +150,31 @@
     font-size: 12px; color: #333; text-align: center; padding: 16px;
     font-family: monospace; word-break: break-all;
   }
+
+  /* Face detection overlay */
+  #face-canvas {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  }
+  .liveness-progress {
+    background: #0d0d24; border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; margin: 8px 0;
+  }
+  .liveness-progress .steps { display: flex; gap: 4px; margin-top: 8px; }
+  .liveness-progress .step {
+    flex: 1; height: 6px; border-radius: 3px; background: var(--border);
+    transition: background 0.3s;
+  }
+  .liveness-progress .step.done { background: var(--green); }
+  .liveness-progress .step.active { background: var(--accent); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
+  .face-status {
+    text-align: center; font-size: 13px; color: var(--muted); margin: 4px 0;
+  }
+  .face-status.detecting { color: var(--accent); }
+  .face-status.success { color: var(--green); }
+  .face-status.fail { color: var(--red); }
 </style>
+<script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 </head>
 <body>
 
@@ -202,13 +226,24 @@
 
     <div id="camera-container" style="display:none">
       <video id="video" autoplay playsinline muted></video>
+      <canvas id="face-canvas"></canvas>
       <div class="camera-overlay"></div>
       <div class="challenge-badge" id="challenge-text">Loading...</div>
+    </div>
+
+    <div class="liveness-progress" id="liveness-progress" style="display:none">
+      <div class="face-status" id="face-status">Initializing face detection...</div>
+      <div class="steps">
+        <div class="step" id="step-face" title="Face detected"></div>
+        <div class="step" id="step-center" title="Face centered"></div>
+        <div class="step" id="step-action" title="Liveness action"></div>
+        <div class="step" id="step-done" title="Verified"></div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center" id="liveness-detail">-</div>
     </div>
     <div id="challenge-instructions" class="status"></div>
 
     <button class="btn orange" id="btn-start-cam" onclick="startVerification()">Start Camera Verification</button>
-    <button class="btn green" id="btn-capture" onclick="captureAndClaim()" style="display:none">Capture & Verify</button>
     <button class="btn" onclick="skipVerification()" style="margin-top:8px;background:var(--border)">Skip (0 tokens)</button>
   </div>
 
@@ -268,14 +303,29 @@
 
 <script>
 const API = window.location.origin;
+const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model';
 let walletState = { address: null, token: null, seedPhrase: null, balance: 0 };
 let challengeData = null;
 let videoStream = null;
+let faceDetectionLoop = null;
+let modelsLoaded = false;
 
 // ==================== PANEL NAVIGATION ====================
 function showPanel(id) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-' + id).classList.add('active');
+}
+
+// ==================== LOAD FACE-API MODELS ====================
+async function loadFaceModels() {
+  if (modelsLoaded) return;
+  setFaceStatus('Loading AI models (first time only)...', 'detecting');
+  await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL);
+  modelsLoaded = true;
+  setFaceStatus('AI models loaded', 'success');
 }
 
 // ==================== CREATE WALLET ====================
@@ -291,7 +341,6 @@ async function createNewWallet() {
     walletState.token = data.token;
     walletState.seedPhrase = data.seedPhrase;
 
-    // Show seed phrase
     const wordsEl = document.getElementById('seed-words');
     const words = data.seedPhrase.split(' ');
     wordsEl.innerHTML = words.map((w, i) =>
@@ -360,7 +409,7 @@ async function restoreFromPassphrase() {
   }
 }
 
-// ==================== FACE VERIFICATION ====================
+// ==================== FACE VERIFICATION (REAL) ====================
 async function loadFaucetStats() {
   try {
     const res = await fetch(API + '/api/v1/faucet/status');
@@ -370,53 +419,244 @@ async function loadFaucetStats() {
   } catch (e) {}
 }
 
+function setFaceStatus(msg, cls) {
+  const el = document.getElementById('face-status');
+  el.textContent = msg;
+  el.className = 'face-status' + (cls ? ' ' + cls : '');
+}
+
+function setStep(id, state) {
+  const el = document.getElementById('step-' + id);
+  el.className = 'step' + (state ? ' ' + state : '');
+}
+
+function setDetail(msg) {
+  document.getElementById('liveness-detail').textContent = msg;
+}
+
 async function startVerification() {
+  const btn = document.getElementById('btn-start-cam');
+  btn.disabled = true;
+  btn.textContent = 'Loading...';
+
   try {
+    // 1. Get challenge from server
     const res = await fetch(API + '/api/v1/faucet/start', { method: 'POST' });
     challengeData = await res.json();
-    document.getElementById('challenge-text').textContent = challengeData.action.toUpperCase();
-    document.getElementById('challenge-instructions').textContent = challengeData.instructions;
-    document.getElementById('challenge-instructions').className = 'status info';
-    document.getElementById('camera-container').style.display = 'block';
-    document.getElementById('btn-start-cam').style.display = 'none';
-    document.getElementById('btn-capture').style.display = 'block';
 
+    // 2. Start camera
     videoStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: 640, height: 480 }
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
     });
-    document.getElementById('video').srcObject = videoStream;
+    const video = document.getElementById('video');
+    video.srcObject = videoStream;
+    await new Promise(resolve => video.onloadedmetadata = resolve);
+
+    document.getElementById('camera-container').style.display = 'block';
+    document.getElementById('liveness-progress').style.display = 'block';
+    btn.style.display = 'none';
+
+    const challengeLabels = {
+      blink: 'CLOSE YOUR EYES',
+      smile: 'SMILE',
+      turn_left: 'TURN HEAD LEFT',
+      turn_right: 'TURN HEAD RIGHT',
+      nod: 'LOOK DOWN THEN UP',
+    };
+    document.getElementById('challenge-text').textContent = challengeLabels[challengeData.action] || challengeData.action.toUpperCase();
+
+    // 3. Load face-api models
+    await loadFaceModels();
+
+    // 4. Start real-time face detection loop
+    runLivenessDetection();
+
   } catch (e) {
-    document.getElementById('challenge-instructions').textContent = 'Camera error: ' + e.message;
+    document.getElementById('challenge-instructions').textContent = 'Error: ' + e.message;
     document.getElementById('challenge-instructions').className = 'status error';
+    btn.disabled = false;
+    btn.textContent = 'Start Camera Verification';
   }
 }
 
-async function captureAndClaim() {
-  const btn = document.getElementById('btn-capture');
-  btn.disabled = true;
-  btn.textContent = 'Verifying...';
+async function runLivenessDetection() {
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('face-canvas');
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
 
-  try {
-    const video = document.getElementById('video');
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+
+  // Liveness state machine
+  let state = {
+    faceDetected: false,
+    faceCentered: false,
+    actionDone: false,
+    framesWithFace: 0,
+    framesWithoutFace: 0,
+    neutralExpression: null,    // baseline expression scores
+    actionFrames: 0,            // frames where action was detected
+    requiredActionFrames: 3,    // need 3 frames of the action to confirm
+    descriptor: null,           // 128-dim face embedding
+    baselineLandmarks: null,    // for head movement detection
+  };
+
+  setStep('face', 'active');
+  setFaceStatus('Looking for your face...', 'detecting');
+
+  const action = challengeData.action;
+
+  async function detect() {
+    if (!videoStream) return;
+
+    const result = await faceapi.detectSingleFace(video, options)
+      .withFaceLandmarks(true)
+      .withFaceExpressions()
+      .withFaceDescriptor();
+
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const imageData = ctx.getImageData(
-      Math.floor(canvas.width * 0.25), Math.floor(canvas.height * 0.15),
-      Math.floor(canvas.width * 0.5), Math.floor(canvas.height * 0.7)
-    );
-    const pixels = imageData.data;
-    const embedding = [];
-    const step = Math.floor(pixels.length / 512);
-    for (let i = 0; i < 512; i++) {
-      const idx = i * step;
-      const val = (pixels[idx] + pixels[idx+1] + pixels[idx+2]) / (3*255);
-      embedding.push(parseFloat((val - 0.5).toFixed(6)));
+    if (result) {
+      state.framesWithFace++;
+      state.framesWithoutFace = 0;
+
+      // Draw face box
+      const box = result.detection.box;
+      ctx.strokeStyle = state.faceDetected ? '#00B894' : '#6C5CE7';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(box.x, box.y, box.width, box.height);
+
+      // Draw confidence
+      ctx.fillStyle = '#00B894';
+      ctx.font = '12px monospace';
+      ctx.fillText((result.detection.score * 100).toFixed(0) + '%', box.x, box.y - 5);
+
+      // Step 1: Face detected (need 5 stable frames)
+      if (!state.faceDetected && state.framesWithFace >= 5) {
+        state.faceDetected = true;
+        setStep('face', 'done');
+        setStep('center', 'active');
+        setFaceStatus('Face detected! Center your face in the oval.', 'detecting');
+      }
+
+      // Step 2: Face centered check
+      if (state.faceDetected && !state.faceCentered) {
+        const centerX = box.x + box.width / 2;
+        const centerY = box.y + box.height / 2;
+        const vidCenterX = canvas.width / 2;
+        const vidCenterY = canvas.height / 2;
+        const offX = Math.abs(centerX - vidCenterX) / canvas.width;
+        const offY = Math.abs(centerY - vidCenterY) / canvas.height;
+
+        if (offX < 0.15 && offY < 0.2 && box.width > canvas.width * 0.2) {
+          state.faceCentered = true;
+          state.neutralExpression = { ...result.faceExpressions };
+          state.baselineLandmarks = result.faceLandmarks;
+          setStep('center', 'done');
+          setStep('action', 'active');
+          setFaceStatus('Now: ' + document.getElementById('challenge-text').textContent, 'detecting');
+          setDetail('Perform the action shown on camera');
+        } else {
+          setDetail(`Move ${offX > 0.15 ? 'to center' : ''}${offY > 0.2 ? ' and closer' : ''}`);
+        }
+      }
+
+      // Step 3: Liveness action detection
+      if (state.faceCentered && !state.actionDone) {
+        const expr = result.faceExpressions;
+        const landmarks = result.faceLandmarks;
+        let actionDetected = false;
+
+        if (action === 'smile') {
+          actionDetected = expr.happy > 0.7;
+          setDetail(`Smile confidence: ${(expr.happy * 100).toFixed(0)}% (need 70%)`);
+        } else if (action === 'blink') {
+          // Detect eyes closed via landmarks - eye aspect ratio
+          const leftEye = landmarks.getLeftEye();
+          const rightEye = landmarks.getRightEye();
+          const leftEAR = eyeAspectRatio(leftEye);
+          const rightEAR = eyeAspectRatio(rightEye);
+          const avgEAR = (leftEAR + rightEAR) / 2;
+          actionDetected = avgEAR < 0.21;
+          setDetail(`Eye openness: ${(avgEAR * 100).toFixed(0)}% (close eyes below 21%)`);
+        } else if (action === 'turn_left' || action === 'turn_right') {
+          const nose = landmarks.getNose();
+          const jaw = landmarks.getJawOutline();
+          const noseX = nose[3].x;
+          const faceLeft = jaw[0].x;
+          const faceRight = jaw[jaw.length - 1].x;
+          const faceWidth = faceRight - faceLeft;
+          const noseRatio = (noseX - faceLeft) / faceWidth;
+          if (action === 'turn_left') {
+            actionDetected = noseRatio < 0.35;
+            setDetail(`Head position: ${(noseRatio * 100).toFixed(0)}% (turn left past 35%)`);
+          } else {
+            actionDetected = noseRatio > 0.65;
+            setDetail(`Head position: ${(noseRatio * 100).toFixed(0)}% (turn right past 65%)`);
+          }
+        } else if (action === 'nod') {
+          const nose = landmarks.getNose();
+          const noseY = nose[3].y;
+          const boxTop = box.y;
+          const relY = (noseY - boxTop) / box.height;
+          actionDetected = relY > 0.6;
+          setDetail(`Head tilt: ${(relY * 100).toFixed(0)}% (nod down past 60%)`);
+        }
+
+        if (actionDetected) {
+          state.actionFrames++;
+          if (state.actionFrames >= state.requiredActionFrames) {
+            state.actionDone = true;
+            state.descriptor = Array.from(result.descriptor); // 128-dim embedding
+            setStep('action', 'done');
+            setStep('done', 'done');
+            setFaceStatus('Liveness verified! Claiming tokens...', 'success');
+            setDetail('Submitting to blockchain...');
+            stopDetection();
+            await submitClaim(state.descriptor);
+            return;
+          }
+        } else {
+          state.actionFrames = Math.max(0, state.actionFrames - 1);
+        }
+      }
+    } else {
+      state.framesWithoutFace++;
+      if (state.framesWithoutFace > 15 && state.faceDetected) {
+        setFaceStatus('Face lost! Move back in front of camera.', 'fail');
+      } else if (!state.faceDetected) {
+        setFaceStatus('Looking for your face...', 'detecting');
+      }
     }
 
+    faceDetectionLoop = requestAnimationFrame(detect);
+  }
+
+  detect();
+}
+
+// Eye Aspect Ratio for blink detection
+function eyeAspectRatio(eye) {
+  const v1 = dist(eye[1], eye[5]);
+  const v2 = dist(eye[2], eye[4]);
+  const h = dist(eye[0], eye[3]);
+  return (v1 + v2) / (2 * h);
+}
+
+function dist(a, b) {
+  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+}
+
+function stopDetection() {
+  if (faceDetectionLoop) {
+    cancelAnimationFrame(faceDetectionLoop);
+    faceDetectionLoop = null;
+  }
+}
+
+async function submitClaim(descriptor) {
+  try {
     stopCamera();
 
     const res = await fetch(API + '/api/v1/faucet/claim', {
@@ -424,7 +664,7 @@ async function captureAndClaim() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         challengeId: challengeData.challengeId,
-        faceEmbedding: embedding,
+        faceEmbedding: descriptor,
         livenessPass: true,
         address: walletState.address,
       }),
@@ -433,24 +673,33 @@ async function captureAndClaim() {
 
     if (result.success) {
       walletState.balance = result.amount;
-      document.getElementById('challenge-instructions').textContent = 'Verified! You received ' + result.amount.toLocaleString() + ' IOTAI';
+      document.getElementById('challenge-instructions').textContent =
+        'Verified! You received ' + result.amount.toLocaleString() + ' IOTAI';
       document.getElementById('challenge-instructions').className = 'status success';
-      setTimeout(() => openDashboard(), 1500);
+      setTimeout(() => openDashboard(), 2000);
     } else {
       document.getElementById('challenge-instructions').textContent = result.error;
       document.getElementById('challenge-instructions').className = 'status error';
-      btn.disabled = false;
-      btn.textContent = 'Capture & Verify';
+      resetVerificationUI();
     }
   } catch (e) {
     document.getElementById('challenge-instructions').textContent = 'Error: ' + e.message;
     document.getElementById('challenge-instructions').className = 'status error';
-    btn.disabled = false;
-    btn.textContent = 'Capture & Verify';
+    resetVerificationUI();
   }
 }
 
+function resetVerificationUI() {
+  document.getElementById('btn-start-cam').style.display = 'block';
+  document.getElementById('btn-start-cam').disabled = false;
+  document.getElementById('btn-start-cam').textContent = 'Try Again';
+  document.getElementById('camera-container').style.display = 'none';
+  document.getElementById('liveness-progress').style.display = 'none';
+  ['face', 'center', 'action', 'done'].forEach(s => setStep(s, ''));
+}
+
 function stopCamera() {
+  stopDetection();
   if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
 }
 

@@ -23,6 +23,22 @@
 
 import { hash } from './crypto.js';
 
+/**
+ * Cosine similarity between two vectors
+ * Returns value between -1 and 1 (1 = identical, 0 = unrelated)
+ */
+function cosineSimilarity(a, b) {
+  const len = Math.min(a.length, b.length);
+  let dot = 0, magA = 0, magB = 0;
+  for (let i = 0; i < len; i++) {
+    dot += a[i] * b[i];
+    magA += a[i] * a[i];
+    magB += b[i] * b[i];
+  }
+  const denom = Math.sqrt(magA) * Math.sqrt(magB);
+  return denom === 0 ? 0 : dot / denom;
+}
+
 // Distribution config
 const TOTAL_SUPPLY = 1_000_000_000;
 const FAUCET_POOL = TOTAL_SUPPLY * 0.60;         // 600,000,000 IOTAI (60%)
@@ -38,6 +54,9 @@ export class Faucet {
 
     /** @type {Set<string>} - hashes of facial embeddings (for uniqueness check) */
     this.faceHashes = new Set();
+
+    /** @type {number[][]} - stored embeddings for cosine similarity check */
+    this.storedEmbeddings = [];
 
     /** @type {Map<string, number>} - IP -> last claim timestamp */
     this.ipCooldowns = new Map();
@@ -106,7 +125,7 @@ export class Faucet {
    * Step 2: Verify face and claim tokens
    * @param {object} params
    * @param {string} params.challengeId - from startVerification
-   * @param {number[]} params.faceEmbedding - 512-dim facial feature vector
+   * @param {number[]} params.faceEmbedding - 128-dim facial feature vector (from face-api.js)
    * @param {boolean} params.livenessPass - did the liveness check pass
    * @param {string} params.address - IOTAI wallet address to receive tokens
    * @param {string} params.ip - requester IP for rate limiting
@@ -135,22 +154,31 @@ export class Faucet {
       return { success: false, error: 'This wallet has already claimed tokens.' };
     }
 
-    // 5. Hash the face embedding (privacy-preserving)
+    // 5. Validate embedding dimensions
+    if (!Array.isArray(faceEmbedding) || faceEmbedding.length < 64) {
+      return { success: false, error: 'Invalid face embedding. Please use a real camera with face detection.' };
+    }
+
+    // 6. Hash the face embedding (privacy-preserving)
     const embeddingString = faceEmbedding.map(v => v.toFixed(6)).join(',');
     const faceHash = hash(embeddingString);
 
-    // 6. Check for duplicate face
+    // 7. Check for exact duplicate face
     if (this.faceHashes.has(faceHash)) {
       return { success: false, error: 'This face has already been registered. Each person can only claim once.' };
     }
 
-    // 7. Check similarity against existing embeddings (fuzzy match)
-    // The exact hash check above handles identical embeddings.
-    // For production, you'd also do cosine similarity < threshold
-    // against stored embeddings to catch slight variations.
+    // 8. Cosine similarity check against all stored embeddings
+    for (const stored of this.storedEmbeddings) {
+      const similarity = cosineSimilarity(faceEmbedding, stored);
+      if (similarity > 0.6) {
+        return { success: false, error: 'A similar face is already registered. Each person can only claim once.' };
+      }
+    }
 
-    // 8. All checks passed - distribute tokens!
+    // 9. All checks passed - distribute tokens!
     this.faceHashes.add(faceHash);
+    this.storedEmbeddings.push(faceEmbedding.map(v => parseFloat(v.toFixed(6))));
     this.claimedAddresses.add(address);
     this.ipCooldowns.set(ip, Date.now());
 
@@ -178,6 +206,7 @@ export class Faucet {
   exportState() {
     return {
       faceHashes: Array.from(this.faceHashes),
+      storedEmbeddings: this.storedEmbeddings,
       claimedAddresses: Array.from(this.claimedAddresses),
       tokensDistributed: this.tokensDistributed,
       totalRecipients: this.totalRecipients,
@@ -189,6 +218,7 @@ export class Faucet {
    */
   importState(state) {
     this.faceHashes = new Set(state.faceHashes);
+    this.storedEmbeddings = state.storedEmbeddings || [];
     this.claimedAddresses = new Set(state.claimedAddresses);
     this.tokensDistributed = state.tokensDistributed;
     this.totalRecipients = state.totalRecipients;
