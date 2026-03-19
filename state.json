@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "savedAt": "2026-03-19T00:00:00.000Z",
+  "transactions": [],
+  "balances": {},
+  "nonces": [],
+  "faucet": {
+    "faceHashes": [],
+    "storedEmbeddings": [],
+    "claimedAddresses": [],
+    "ipClaimCounts": {},
+    "tokensDistributed": 0,
+    "totalRecipients": 0
+  }
+}
