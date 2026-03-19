@@ -1,15 +1,13 @@
 /**
  * IOTAI Persistent Storage
  *
- * Saves DAG state, balances, and faucet data to disk as JSON files.
- * Auto-saves periodically and on shutdown.
- * Auto-loads on startup if data exists.
+ * Saves DAG state to disk (fast cache) AND to GitHub (permanent backup).
+ * On startup, loads from disk first; if empty, fetches from GitHub.
+ * This ensures data survives Render redeploys (which wipe the filesystem).
  *
- * Storage files:
- *   data/dag.json      - All transactions
- *   data/balances.json  - Address balances
- *   data/faucet.json    - Face hashes, claimed addresses, distribution stats
- *   data/nonces.json    - Used nonces (replay protection)
+ * Required env var for persistence across deploys:
+ *   GITHUB_TOKEN - Personal Access Token with 'repo' scope
+ *   GITHUB_REPO  - e.g. "JOSEFON31/IOTAI" (defaults to this)
  */
 
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
@@ -18,13 +16,19 @@ import { fileURLToPath } from 'url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DATA_DIR = resolve(__dirname, '../../data');
+const STATE_FILE = 'iotai-state.json';
+
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN || '';
+const GITHUB_REPO = process.env.GITHUB_REPO || 'JOSEFON31/IOTAI';
+const GITHUB_BRANCH = 'data';
+const GITHUB_PATH = 'state.json';
 
 export class Storage {
   /**
    * @param {object} params
    * @param {import('./dag.js').DAG} params.dag
    * @param {import('./faucet.js').Faucet} params.faucet
-   * @param {number} [params.autoSaveInterval=30000] - ms between auto-saves
+   * @param {number} [params.autoSaveInterval=30000]
    */
   constructor({ dag, faucet, autoSaveInterval = 30000 }) {
     this.dag = dag;
@@ -32,181 +36,323 @@ export class Storage {
     this.autoSaveInterval = autoSaveInterval;
     this.timer = null;
     this.saveCount = 0;
+    this.lastGithubSave = 0;
+    this.githubSha = null; // SHA of the file on GitHub (needed for updates)
+    this.githubEnabled = !!GITHUB_TOKEN;
+    this.saving = false;
 
-    // Ensure data directory exists
     if (!existsSync(DATA_DIR)) {
       mkdirSync(DATA_DIR, { recursive: true });
     }
   }
 
-  /**
-   * Start auto-save timer and register shutdown hooks
-   */
   start() {
-    // Auto-save periodically
-    this.timer = setInterval(() => {
-      this.save();
-    }, this.autoSaveInterval);
+    this.timer = setInterval(() => this.save(), this.autoSaveInterval);
 
-    // Save on shutdown
     const shutdown = () => {
-      this.save();
-      process.exit(0);
+      this.save({ forceGithub: true });
+      setTimeout(() => process.exit(0), 2000);
     };
-
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
 
-    console.log(`[Storage] Auto-save every ${this.autoSaveInterval / 1000}s to ${DATA_DIR}`);
+    console.log(`[Storage] Auto-save every ${this.autoSaveInterval / 1000}s`);
+    if (this.githubEnabled) {
+      console.log(`[Storage] GitHub backup enabled: ${GITHUB_REPO}@${GITHUB_BRANCH}`);
+    } else {
+      console.log('[Storage] WARNING: No GITHUB_TOKEN set. Data will be lost on redeploy!');
+      console.log('[Storage] Set GITHUB_TOKEN env var in Render for persistent storage.');
+    }
   }
 
-  /**
-   * Stop auto-save timer
-   */
   stop() {
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
+    if (this.timer) { clearInterval(this.timer); this.timer = null; }
   }
 
-  /**
-   * Save all state to disk
-   */
-  save() {
-    try {
-      // 1. Transactions
-      const transactions = Array.from(this.dag.transactions.values());
-      this._writeJSON('dag.json', transactions);
+  // ==================== SERIALIZE STATE ====================
 
-      // 2. Balances
-      const balances = Object.fromEntries(this.dag.balances);
-      this._writeJSON('balances.json', balances);
-
-      // 3. Nonces
-      const nonces = Array.from(this.dag.usedNonces);
-      this._writeJSON('nonces.json', nonces);
-
-      // 4. Faucet state
-      const faucetState = this.faucet.exportState();
-      this._writeJSON('faucet.json', faucetState);
-
-      this.saveCount++;
-      if (this.saveCount % 10 === 0) {
-        console.log(`[Storage] Saved (${transactions.length} txs, ${Object.keys(balances).length} addresses, ${faucetState.totalRecipients} faucet claims)`);
-      }
-    } catch (err) {
-      console.error('[Storage] Save error:', err.message);
-    }
-  }
-
-  /**
-   * Load all state from disk (call before starting the network)
-   * @returns {boolean} true if data was loaded, false if starting fresh
-   */
-  load() {
-    const dagPath = resolve(DATA_DIR, 'dag.json');
-    if (!existsSync(dagPath)) {
-      console.log('[Storage] No existing data found. Starting fresh.');
-      return false;
-    }
-
-    try {
-      // 1. Load transactions and rebuild DAG
-      const transactions = this._readJSON('dag.json');
-      if (!transactions || transactions.length === 0) {
-        console.log('[Storage] Empty DAG file. Starting fresh.');
-        return false;
-      }
-
-      // Find genesis
-      const genesis = transactions.find(tx => tx.type === 'genesis');
-      if (!genesis) {
-        console.log('[Storage] No genesis found in saved data. Starting fresh.');
-        return false;
-      }
-
-      // Set genesis
-      this.dag.transactions.set(genesis.id, genesis);
-      this.dag.children.set(genesis.id, new Set());
-      this.dag.genesisId = genesis.id;
-      this.dag.tips.add(genesis.id);
-
-      // Add remaining transactions in timestamp order
-      const remaining = transactions
-        .filter(tx => tx.type !== 'genesis')
-        .sort((a, b) => a.timestamp - b.timestamp);
-
-      for (const tx of remaining) {
-        // Add directly without balance checks (we'll restore balances from file)
-        this.dag.transactions.set(tx.id, tx);
-        this.dag.children.set(tx.id, new Set());
-
-        for (const parentId of tx.parents) {
-          this.dag.children.get(parentId)?.add(tx.id);
-          this.dag.tips.delete(parentId);
-        }
-        this.dag.tips.add(tx.id);
-
-        if (tx.nonce) {
-          this.dag.usedNonces.add(tx.nonce);
-        }
-      }
-
-      // 2. Load balances (overwrite computed ones with saved state)
-      const balances = this._readJSON('balances.json');
-      if (balances) {
-        this.dag.balances = new Map(Object.entries(balances).map(([k, v]) => [k, Number(v)]));
-      }
-
-      // 3. Load nonces
-      const nonces = this._readJSON('nonces.json');
-      if (nonces) {
-        this.dag.usedNonces = new Set(nonces);
-      }
-
-      // 4. Load faucet state
-      const faucetState = this._readJSON('faucet.json');
-      if (faucetState) {
-        this.faucet.importState(faucetState);
-      }
-
-      console.log(`[Storage] Loaded: ${this.dag.transactions.size} txs, ${this.dag.balances.size} addresses, ${this.faucet.totalRecipients} faucet claims`);
-      return true;
-
-    } catch (err) {
-      console.error('[Storage] Load error:', err.message);
-      console.log('[Storage] Starting fresh due to load error.');
-      return false;
-    }
-  }
-
-  /**
-   * Get storage stats
-   */
-  getStats() {
+  _serializeState() {
     return {
-      saveCount: this.saveCount,
-      dataDir: DATA_DIR,
-      autoSaveInterval: this.autoSaveInterval,
-      files: ['dag.json', 'balances.json', 'nonces.json', 'faucet.json'].map(f => {
-        const path = resolve(DATA_DIR, f);
-        return { file: f, exists: existsSync(path) };
-      }),
+      version: 2,
+      savedAt: new Date().toISOString(),
+      transactions: Array.from(this.dag.transactions.values()),
+      balances: Object.fromEntries(this.dag.balances),
+      nonces: Array.from(this.dag.usedNonces),
+      faucet: this.faucet.exportState(),
     };
   }
 
-  // ---- Private ----
+  _restoreState(state) {
+    if (!state || !state.transactions || state.transactions.length === 0) return false;
 
-  _writeJSON(filename, data) {
-    const path = resolve(DATA_DIR, filename);
-    writeFileSync(path, JSON.stringify(data), 'utf-8');
+    const genesis = state.transactions.find(tx => tx.type === 'genesis');
+    if (!genesis) return false;
+
+    // Restore genesis
+    this.dag.transactions.set(genesis.id, genesis);
+    this.dag.children.set(genesis.id, new Set());
+    this.dag.genesisId = genesis.id;
+    this.dag.tips.add(genesis.id);
+
+    // Restore transactions in order
+    const remaining = state.transactions
+      .filter(tx => tx.type !== 'genesis')
+      .sort((a, b) => a.timestamp - b.timestamp);
+
+    for (const tx of remaining) {
+      this.dag.transactions.set(tx.id, tx);
+      this.dag.children.set(tx.id, new Set());
+      for (const parentId of tx.parents) {
+        this.dag.children.get(parentId)?.add(tx.id);
+        this.dag.tips.delete(parentId);
+      }
+      this.dag.tips.add(tx.id);
+      if (tx.nonce) this.dag.usedNonces.add(tx.nonce);
+    }
+
+    // Restore balances
+    if (state.balances) {
+      this.dag.balances = new Map(Object.entries(state.balances).map(([k, v]) => [k, Number(v)]));
+    }
+
+    // Restore nonces
+    if (state.nonces) {
+      this.dag.usedNonces = new Set(state.nonces);
+    }
+
+    // Restore faucet
+    if (state.faucet) {
+      this.faucet.importState(state.faucet);
+    }
+
+    return true;
   }
 
-  _readJSON(filename) {
-    const path = resolve(DATA_DIR, filename);
-    if (!existsSync(path)) return null;
-    const raw = readFileSync(path, 'utf-8');
-    return JSON.parse(raw);
+  // ==================== DISK STORAGE (fast cache) ====================
+
+  _saveToDisk(state) {
+    try {
+      writeFileSync(resolve(DATA_DIR, STATE_FILE), JSON.stringify(state), 'utf-8');
+    } catch (err) {
+      console.error('[Storage] Disk save error:', err.message);
+    }
+  }
+
+  _loadFromDisk() {
+    try {
+      const path = resolve(DATA_DIR, STATE_FILE);
+      if (!existsSync(path)) return null;
+      return JSON.parse(readFileSync(path, 'utf-8'));
+    } catch {
+      return null;
+    }
+  }
+
+  // ==================== GITHUB STORAGE (permanent) ====================
+
+  async _ensureDataBranch() {
+    if (!this.githubEnabled) return;
+
+    try {
+      // Check if branch exists
+      const res = await fetch(
+        `https://api.github.com/repos/${GITHUB_REPO}/branches/${GITHUB_BRANCH}`,
+        { headers: this._githubHeaders() }
+      );
+
+      if (res.status === 404) {
+        // Create branch from main
+        const mainRes = await fetch(
+          `https://api.github.com/repos/${GITHUB_REPO}/git/refs/heads/main`,
+          { headers: this._githubHeaders() }
+        );
+        const mainData = await mainRes.json();
+        const sha = mainData.object?.sha;
+
+        if (sha) {
+          await fetch(
+            `https://api.github.com/repos/${GITHUB_REPO}/git/refs`,
+            {
+              method: 'POST',
+              headers: this._githubHeaders(),
+              body: JSON.stringify({ ref: `refs/heads/${GITHUB_BRANCH}`, sha }),
+            }
+          );
+          console.log(`[Storage] Created '${GITHUB_BRANCH}' branch on GitHub`);
+        }
+      }
+    } catch (err) {
+      console.error('[Storage] GitHub branch check error:', err.message);
+    }
+  }
+
+  async _saveToGithub(state) {
+    if (!this.githubEnabled) return;
+
+    try {
+      const content = Buffer.from(JSON.stringify(state)).toString('base64');
+      const body = {
+        message: `[auto] Save state: ${state.transactions.length} txs, ${new Date().toISOString()}`,
+        content,
+        branch: GITHUB_BRANCH,
+      };
+
+      if (this.githubSha) {
+        body.sha = this.githubSha;
+      }
+
+      const res = await fetch(
+        `https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_PATH}`,
+        {
+          method: 'PUT',
+          headers: this._githubHeaders(),
+          body: JSON.stringify(body),
+        }
+      );
+
+      if (res.ok) {
+        const data = await res.json();
+        this.githubSha = data.content?.sha;
+        this.lastGithubSave = Date.now();
+        console.log(`[Storage] GitHub save OK (${state.transactions.length} txs)`);
+      } else {
+        const errText = await res.text();
+        // If SHA conflict, fetch current SHA and retry
+        if (res.status === 409 || res.status === 422) {
+          console.log('[Storage] GitHub SHA conflict, refreshing...');
+          await this._fetchGithubSha();
+        } else {
+          console.error(`[Storage] GitHub save error ${res.status}: ${errText.substring(0, 200)}`);
+        }
+      }
+    } catch (err) {
+      console.error('[Storage] GitHub save error:', err.message);
+    }
+  }
+
+  async _loadFromGithub() {
+    if (!this.githubEnabled) return null;
+
+    try {
+      const res = await fetch(
+        `https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_PATH}?ref=${GITHUB_BRANCH}`,
+        { headers: this._githubHeaders() }
+      );
+
+      if (!res.ok) {
+        console.log(`[Storage] No GitHub state found (${res.status})`);
+        return null;
+      }
+
+      const data = await res.json();
+      this.githubSha = data.sha;
+      const content = Buffer.from(data.content, 'base64').toString('utf-8');
+      const state = JSON.parse(content);
+      console.log(`[Storage] Loaded from GitHub: ${state.transactions?.length || 0} txs`);
+      return state;
+    } catch (err) {
+      console.error('[Storage] GitHub load error:', err.message);
+      return null;
+    }
+  }
+
+  async _fetchGithubSha() {
+    if (!this.githubEnabled) return;
+    try {
+      const res = await fetch(
+        `https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_PATH}?ref=${GITHUB_BRANCH}`,
+        { headers: this._githubHeaders() }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        this.githubSha = data.sha;
+      }
+    } catch {}
+  }
+
+  _githubHeaders() {
+    return {
+      'Authorization': `token ${GITHUB_TOKEN}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json',
+      'User-Agent': 'IOTAI-Node',
+    };
+  }
+
+  // ==================== PUBLIC API ====================
+
+  /**
+   * Save state to disk (always) and GitHub (every 60s or on force)
+   */
+  save({ forceGithub = false } = {}) {
+    if (this.saving) return;
+    this.saving = true;
+
+    try {
+      const state = this._serializeState();
+
+      // Always save to disk (fast)
+      this._saveToDisk(state);
+      this.saveCount++;
+
+      // Save to GitHub every 60s (to avoid rate limits) or when forced
+      const timeSinceGithub = Date.now() - this.lastGithubSave;
+      if (this.githubEnabled && (forceGithub || timeSinceGithub > 60000)) {
+        this._saveToGithub(state).catch(err =>
+          console.error('[Storage] GitHub async save error:', err.message)
+        );
+      }
+
+      if (this.saveCount % 10 === 0) {
+        console.log(`[Storage] Saved #${this.saveCount}: ${state.transactions.length} txs, ${Object.keys(state.balances).length} addrs`);
+      }
+    } catch (err) {
+      console.error('[Storage] Save error:', err.message);
+    } finally {
+      this.saving = false;
+    }
+  }
+
+  /**
+   * Load state: try disk first, then GitHub
+   * @returns {boolean}
+   */
+  async load() {
+    // 1. Try disk (fast, available within same deploy)
+    const diskState = this._loadFromDisk();
+    if (diskState && diskState.transactions?.length > 0) {
+      const ok = this._restoreState(diskState);
+      if (ok) {
+        console.log('[Storage] Restored from disk cache');
+        // Fetch GitHub SHA in background for future saves
+        if (this.githubEnabled) this._fetchGithubSha().catch(() => {});
+        return true;
+      }
+    }
+
+    // 2. Try GitHub (permanent, survives redeploy)
+    if (this.githubEnabled) {
+      await this._ensureDataBranch();
+      const githubState = await this._loadFromGithub();
+      if (githubState && githubState.transactions?.length > 0) {
+        const ok = this._restoreState(githubState);
+        if (ok) {
+          // Cache to disk for faster subsequent loads
+          this._saveToDisk(githubState);
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  getStats() {
+    return {
+      saveCount: this.saveCount,
+      githubEnabled: this.githubEnabled,
+      lastGithubSave: this.lastGithubSave ? new Date(this.lastGithubSave).toISOString() : null,
+      autoSaveInterval: this.autoSaveInterval,
+    };
   }
 }

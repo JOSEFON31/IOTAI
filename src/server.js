@@ -32,15 +32,6 @@ const dag = new DAG();
 const faucet = new Faucet(dag);
 const storage = new Storage({ dag, faucet, autoSaveInterval: 30000 });
 
-// Try to load existing data, otherwise initialize fresh
-const loaded = storage.load();
-if (!loaded) {
-  dag.initialize(1_000_000_000);
-  console.log('[Init] Fresh DAG initialized with 1B IOTAI supply');
-} else {
-  console.log('[Init] Restored DAG from disk');
-}
-
 // Sessions: token -> { wallet, expiresAt }
 const sessions = new Map();
 const TOKEN_TTL = 60 * 60 * 1000;
@@ -53,37 +44,45 @@ const demoAgents = [
   { name: 'Delta', wallet: new Wallet({ passphrase: 'agent-delta-2024' }), color: '#0984E3' },
 ];
 
-// Only seed demo data on fresh start
-if (!loaded) {
-  for (const a of demoAgents) {
-    dag.balances.set(a.wallet.address, 50_000);
-  }
-  dag.balances.set('iotai_genesis', 1_000_000_000 - 200_000);
+// Initialize: load from disk/GitHub, or seed fresh data
+async function initialize() {
+  const loaded = await storage.load();
+  if (!loaded) {
+    dag.initialize(1_000_000_000);
+    console.log('[Init] Fresh DAG initialized with 1B IOTAI supply');
 
-  const txIds = [dag.genesisId];
-  function addDemoTx(si, ri, amount, meta) {
-    const s = demoAgents[si], r = demoAgents[ri];
-    const p1 = txIds[txIds.length - 1], p2 = txIds[Math.max(0, txIds.length - 2)];
-    const tx = s.wallet.send(r.wallet.address, amount, [p1, p2], { from: s.name, to: r.name, purpose: meta });
-    if (dag.addTransaction(tx).success) txIds.push(tx.id);
-  }
-  addDemoTx(0,1,100,'API call payment');
-  addDemoTx(1,2,50,'GPU rental');
-  addDemoTx(2,3,30,'Data analysis');
-  addDemoTx(0,2,200,'Model training');
-  addDemoTx(3,0,75,'Inference result');
-  addDemoTx(1,3,120,'Storage fee');
-  addDemoTx(2,0,45,'Callback payment');
-  addDemoTx(0,3,90,'Agent subscription');
-  addDemoTx(3,1,60,'Report generation');
+    for (const a of demoAgents) {
+      dag.balances.set(a.wallet.address, 50_000);
+    }
+    dag.balances.set('iotai_genesis', 1_000_000_000 - 200_000);
 
-  // Save initial state immediately
-  storage.save();
-  console.log('[Init] Demo data seeded and saved');
+    const txIds = [dag.genesisId];
+    function addDemoTx(si, ri, amount, meta) {
+      const s = demoAgents[si], r = demoAgents[ri];
+      const p1 = txIds[txIds.length - 1], p2 = txIds[Math.max(0, txIds.length - 2)];
+      const tx = s.wallet.send(r.wallet.address, amount, [p1, p2], { from: s.name, to: r.name, purpose: meta });
+      if (dag.addTransaction(tx).success) txIds.push(tx.id);
+    }
+    addDemoTx(0,1,100,'API call payment');
+    addDemoTx(1,2,50,'GPU rental');
+    addDemoTx(2,3,30,'Data analysis');
+    addDemoTx(0,2,200,'Model training');
+    addDemoTx(3,0,75,'Inference result');
+    addDemoTx(1,3,120,'Storage fee');
+    addDemoTx(2,0,45,'Callback payment');
+    addDemoTx(0,3,90,'Agent subscription');
+    addDemoTx(3,1,60,'Report generation');
+
+    storage.save({ forceGithub: true });
+    console.log('[Init] Demo data seeded and saved');
+  } else {
+    console.log('[Init] Restored existing data');
+  }
+
+  storage.start();
 }
 
-// Start auto-save
-storage.start();
+await initialize();
 
 // ---- Visualizer HTML builder ----
 function buildVisualizerData() {
