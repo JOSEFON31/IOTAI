@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IOTAI Dashboard - Node Monitor</title>
+<style>
+:root{--bg:#0a0a1a;--bg2:#111133;--card:#1a1a3e;--border:#2a2a5e;--text:#e0e0f0;--muted:#888;--accent:#6C5CE7;--green:#00B894;--orange:#E17055;--blue:#0984E3;--yellow:#FDCB6E;--red:#d63031}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;line-height:1.6}
+a{color:var(--accent);text-decoration:none}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,10,26,0.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px}
+nav .logo{font-size:22px;font-weight:bold;background:linear-gradient(135deg,var(--accent),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+nav .links{display:flex;gap:16px;align-items:center}
+nav .links a{color:var(--muted);font-size:13px}
+nav .links a:hover{color:var(--text)}
+.container{max-width:1300px;margin:0 auto;padding:72px 24px 40px}
+.page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px}
+.page-header h1{font-size:28px}
+.page-header h1 span{background:linear-gradient(135deg,var(--accent),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:6px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+.refresh-info{font-size:12px;color:var(--muted)}
+
+/* STATS GRID */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:28px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;transition:transform 0.2s}
+.stat-card:hover{transform:translateY(-2px)}
+.stat-card .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px}
+.stat-card .value{font-size:26px;font-weight:bold}
+.stat-card .sub{font-size:11px;color:var(--muted);margin-top:2px}
+.green{color:var(--green)}.blue{color:var(--blue)}.orange{color:var(--orange)}.yellow{color:var(--yellow)}.accent{color:var(--accent)}
+
+/* SECTIONS */
+.section{margin-bottom:28px}
+.section h2{font-size:18px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+
+/* TABLES */
+.table-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg2);padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:var(--muted);letter-spacing:0.5px}
+td{padding:10px 14px;border-top:1px solid var(--border)}
+tr:hover td{background:#ffffff05}
+.mono{font-family:monospace;font-size:11px;color:var(--muted)}
+.badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:600}
+.badge-green{background:var(--green)22;color:var(--green)}
+.badge-orange{background:var(--orange)22;color:var(--orange)}
+.badge-blue{background:var(--blue)22;color:var(--blue)}
+
+/* CHART-LIKE BAR */
+.bar-container{height:8px;background:var(--border);border-radius:4px;overflow:hidden;margin-top:6px}
+.bar-fill{height:100%;border-radius:4px;transition:width 0.5s}
+
+/* PEERS LIST */
+.peer-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.peer-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.peer-info{flex:1}
+.peer-name{font-size:13px;font-weight:600}
+.peer-url{font-size:11px;color:var(--muted);font-family:monospace}
+.peer-stats{text-align:right;font-size:11px;color:var(--muted)}
+
+/* LOG */
+.log-box{background:#000;border:1px solid var(--border);border-radius:10px;padding:14px;font-family:monospace;font-size:12px;max-height:300px;overflow-y:auto;line-height:1.8}
+.log-line{display:flex;gap:8px}
+.log-time{color:var(--muted);flex-shrink:0}
+.log-msg{color:var(--green)}
+.log-warn{color:var(--orange)}
+.log-err{color:var(--red)}
+
+@media(max-width:768px){.grid-2,.grid-3{grid-template-columns:1fr}.stats-grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<nav>
+  <a href="/" class="logo">IOTAI</a>
+  <div class="links">
+    <a href="/">Home</a><a href="/wallet.html">Wallet</a><a href="/visualizer">Visualizer</a><a href="/marketplace.html">Marketplace</a>
+    <a href="/dashboard.html" style="color:var(--green);font-weight:bold">Dashboard</a>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <h1><span class="live-dot"></span><span>Node Dashboard</span></h1>
+    <div class="refresh-info">Auto-refresh: <span id="countdown">5</span>s | Last: <span id="last-update">-</span></div>
+  </div>
+
+  <!-- MAIN STATS -->
+  <div class="stats-grid" id="main-stats"></div>
+
+  <!-- DAG + FEES -->
+  <div class="grid-2">
+    <div class="section">
+      <h2>DAG Status</h2>
+      <div class="stats-grid" id="dag-stats" style="grid-template-columns:1fr 1fr"></div>
+    </div>
+    <div class="section">
+      <h2>Fee Pool</h2>
+      <div class="stats-grid" id="fee-stats" style="grid-template-columns:1fr 1fr"></div>
+    </div>
+  </div>
+
+  <!-- TOP ADDRESSES + RECENT TXS -->
+  <div class="grid-2">
+    <div class="section">
+      <h2>Top Addresses</h2>
+      <div class="table-wrap"><table><thead><tr><th>Address</th><th>Balance</th><th>Txs</th></tr></thead><tbody id="top-addr-body"></tbody></table></div>
+    </div>
+    <div class="section">
+      <h2>Recent Transactions</h2>
+      <div class="table-wrap"><table><thead><tr><th>ID</th><th>Type</th><th>Amount</th><th>Fee</th><th>Time</th></tr></thead><tbody id="recent-tx-body"></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- MARKETPLACE + PEERS -->
+  <div class="grid-2">
+    <div class="section">
+      <h2>Marketplace</h2>
+      <div class="stats-grid" id="mp-stats" style="grid-template-columns:1fr 1fr"></div>
+    </div>
+    <div class="section">
+      <h2>Connected Peers</h2>
+      <div id="peers-list"></div>
+    </div>
+  </div>
+
+  <!-- ESCROW STATUS -->
+  <div class="section">
+    <h2>Active Escrows</h2>
+    <div class="table-wrap"><table><thead><tr><th>Purchase</th><th>Buyer</th><th>Seller</th><th>Amount</th><th>Status</th><th>Deadline</th></tr></thead><tbody id="escrow-body"></tbody></table></div>
+  </div>
+
+  <!-- ACTIVITY LOG -->
+  <div class="section">
+    <h2>Activity Log</h2>
+    <div class="log-box" id="log-box"></div>
+  </div>
+</div>
+
+<script>
+const API='';
+let ws=null;
+let logLines=[];
+
+async function refresh() {
+  try {
+    const [stats,fees,topAddr,mpStats,peers] = await Promise.all([
+      fetch(API+'/api/v1/network/stats').then(r=>r.json()),
+      fetch(API+'/api/v1/fees').then(r=>r.json()),
+      fetch(API+'/api/v1/dag/top-addresses?limit=10').then(r=>r.json()),
+      fetch(API+'/api/v1/marketplace/stats').then(r=>r.json()),
+      fetch(API+'/api/v1/network/peers').then(r=>r.json()).catch(()=>[]),
+    ]);
+
+    // Main stats
+    document.getElementById('main-stats').innerHTML = [
+      sc('Total Transactions',stats.totalTransactions,'green'),
+      sc('Active Tips',stats.tipCount,'blue'),
+      sc('Unique Addresses',stats.uniqueAddresses,'accent'),
+      sc('Used Nonces',stats.usedNonces,'muted'),
+      sc('Fee Pool',fmt(stats.fees?.feePoolBalance||0)+' IOTAI','green'),
+      sc('Total Fees',fmt(stats.fees?.totalFeesCollected||0)+' IOTAI','yellow'),
+    ].join('');
+
+    // DAG stats
+    const pr=stats.pruning||{};
+    document.getElementById('dag-stats').innerHTML = [
+      sc('Active Txs',pr.totalActive||stats.totalTransactions,'blue'),
+      sc('Pruned Txs',pr.totalPruned||0,'orange'),
+      sc('Memory Est.',pr.memoryEstimate||'-','muted'),
+      sc('Prune Threshold',fmt(pr.pruneThreshold||10000),'muted'),
+    ].join('');
+
+    // Fee stats
+    document.getElementById('fee-stats').innerHTML = [
+      sc('Fee Rate',fees.feeRate||'1%','green'),
+      sc('Min Fee',fees.minFee||1,'muted'),
+      sc('Pool Balance',fmt(fees.feePoolBalance||0)+' IOTAI','green'),
+      sc('Total Collected',fmt(fees.totalFeesCollected||0)+' IOTAI','yellow'),
+    ].join('');
+
+    // Top addresses
+    document.getElementById('top-addr-body').innerHTML = (topAddr||[]).map(a=>`<tr><td class="mono">${a.address.substring(0,24)}...</td><td style="color:var(--green);font-weight:600">${fmt(a.balance)}</td><td>${a.txCount}</td></tr>`).join('')||'<tr><td colspan="3" style="color:var(--muted);text-align:center">No data</td></tr>';
+
+    // Marketplace
+    document.getElementById('mp-stats').innerHTML = [
+      sc('Listings',mpStats.activeListings||0,'accent'),
+      sc('Total Sales',mpStats.totalSales||0,'green'),
+      sc('Volume',fmt(mpStats.totalVolume||0)+' IOTAI','green'),
+      sc('Sellers',mpStats.totalSellers||0,'blue'),
+    ].join('');
+
+    // Peers
+    const peerArr = Array.isArray(peers)?peers:peers.peers||[];
+    document.getElementById('peers-list').innerHTML = peerArr.length>0
+      ? peerArr.map(p=>`<div class="peer-card"><div class="peer-dot" style="background:var(--green)"></div><div class="peer-info"><div class="peer-name">${p.nodeId||'Peer'}</div><div class="peer-url">${p.url||p.address||'-'}</div></div><div class="peer-stats">${p.latency?p.latency+'ms':''}</div></div>`).join('')
+      : '<div class="peer-card"><div class="peer-dot" style="background:var(--orange)"></div><div class="peer-info"><div class="peer-name">Single Node Mode</div><div class="peer-url">No peers connected - P2P sync available</div></div></div>';
+
+    // Recent transactions
+    loadRecentTxs();
+    loadEscrows();
+
+    document.getElementById('last-update').textContent=new Date().toLocaleTimeString();
+  } catch(e) {
+    addLog('Failed to refresh: '+e.message,'err');
+  }
+}
+
+async function loadRecentTxs() {
+  try {
+    // Use the visualizer data which has recent txs
+    const r = await fetch(API+'/api/v1/network/stats');
+    const s = await r.json();
+    // We'll show from top addresses' transactions
+    const ta = await fetch(API+'/api/v1/dag/top-addresses?limit=3').then(r=>r.json());
+    let txIds=[];
+    for(const a of (ta||[])) {
+      if(a.address){
+        const info = await fetch(API+'/api/v1/address/'+a.address).then(r=>r.json());
+        txIds.push(...(info.transactionIds||[]).slice(-5));
+      }
+    }
+    // Fetch individual txs
+    const txs=[];
+    for(const id of [...new Set(txIds)].slice(-10)){
+      try{const t=await fetch(API+'/api/v1/tx/'+id).then(r=>r.json()); if(t.id)txs.push(t);}catch{}
+    }
+    txs.sort((a,b)=>b.timestamp-a.timestamp);
+    document.getElementById('recent-tx-body').innerHTML = txs.slice(0,8).map(t=>`<tr>
+      <td class="mono">${t.id.substring(0,16)}...</td>
+      <td><span class="badge badge-${t.type==='transfer'?'green':t.type==='data'?'blue':'orange'}">${t.type}</span></td>
+      <td>${t.amount>0?fmt(t.amount)+' IOTAI':'-'}</td>
+      <td style="color:var(--yellow)">${t.fee?t.fee:'-'}</td>
+      <td style="font-size:11px;color:var(--muted)">${new Date(t.timestamp).toLocaleTimeString()}</td>
+    </tr>`).join('')||'<tr><td colspan="5" style="color:var(--muted);text-align:center">No transactions</td></tr>';
+  } catch{}
+}
+
+async function loadEscrows() {
+  // Check marketplace purchases for in_escrow status
+  try {
+    document.getElementById('escrow-body').innerHTML='<tr><td colspan="6" style="color:var(--muted);text-align:center;font-size:12px">Escrow data available via authenticated API</td></tr>';
+  } catch{}
+}
+
+function sc(label,value,color){
+  return `<div class="stat-card"><div class="label">${label}</div><div class="value ${color||''}">${value}</div></div>`;
+}
+function fmt(n){return Number(n).toLocaleString()}
+
+function addLog(msg,type='msg'){
+  const time=new Date().toLocaleTimeString();
+  logLines.push({time,msg,type});
+  if(logLines.length>50)logLines.shift();
+  const box=document.getElementById('log-box');
+  box.innerHTML=logLines.map(l=>`<div class="log-line"><span class="log-time">${l.time}</span><span class="log-${l.type}">${l.msg}</span></div>`).join('');
+  box.scrollTop=box.scrollHeight;
+}
+
+// WebSocket for real-time updates
+function connectWS(){
+  try{
+    const proto=location.protocol==='https:'?'wss:':'ws:';
+    ws=new WebSocket(proto+'//'+location.host+'/ws');
+    ws.onopen=()=>{addLog('WebSocket connected','msg');ws.send(JSON.stringify({type:'subscribe',events:['transaction','peer']}));};
+    ws.onmessage=(e)=>{
+      try{
+        const d=JSON.parse(e.data);
+        if(d.type==='transaction'||d.event==='transaction'){
+          addLog(`New TX: ${(d.data?.id||d.id||'').substring(0,16)}... ${d.data?.type||''} ${d.data?.amount||0} IOTAI`,'msg');
+          refresh();
+        } else if(d.type==='peer_joined'){
+          addLog(`Peer joined: ${d.data?.nodeId||'unknown'}`,'msg');
+        }
+      }catch{}
+    };
+    ws.onclose=()=>{addLog('WebSocket disconnected, reconnecting...','warn');setTimeout(connectWS,3000);};
+    ws.onerror=()=>{};
+  }catch{}
+}
+
+// Auto-refresh
+let countdown=5;
+setInterval(()=>{
+  countdown--;
+  document.getElementById('countdown').textContent=countdown;
+  if(countdown<=0){countdown=5;refresh();}
+},1000);
+
+addLog('Dashboard initialized','msg');
+refresh();
+connectWS();
+</script>
+</body>
+</html>

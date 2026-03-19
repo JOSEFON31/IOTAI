@@ -25,6 +25,7 @@ import {
 import { verifyTransaction } from './core/transaction.js';
 import { IOTAIWebSocket } from './api/websocket.js';
 import { Marketplace } from './marketplace/marketplace.js';
+import { P2PSync } from './network/p2p.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DOCS_DIR = resolve(__dirname, '../docs');
@@ -35,6 +36,10 @@ const dag = new DAG();
 const faucet = new Faucet(dag);
 const storage = new Storage({ dag, faucet, autoSaveInterval: 30000 });
 let marketplace; // initialized after DAG loads
+const p2p = new P2PSync({
+  dag,
+  nodeUrl: process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`,
+});
 
 // Sessions: token -> { wallet, expiresAt }
 const sessions = new Map();
@@ -96,6 +101,19 @@ async function initialize() {
 }
 
 await initialize();
+
+// Start P2P sync
+p2p.start();
+
+// Process expired escrows every 5 minutes
+setInterval(() => {
+  if (marketplace) {
+    const result = marketplace.processExpiredEscrows();
+    if (result.released > 0) {
+      console.log(`[Escrow] Auto-released ${result.released} expired escrow(s)`);
+    }
+  }
+}, 5 * 60 * 1000);
 
 // ---- Visualizer HTML builder ----
 function buildVisualizerData() {
@@ -420,6 +438,64 @@ async function handleAPI(req, path, body) {
   }
   if (method === 'GET' && path === '/api/v1/marketplace/my/disputes') {
     return { status: 200, data: marketplace.getDisputes(session.wallet.address) };
+  }
+
+  // ---- Escrow Routes ----
+  if (method === 'POST' && path === '/api/v1/marketplace/escrow/confirm') {
+    try {
+      const tips = dag.selectTips();
+      const result = marketplace.confirmDelivery(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/marketplace/escrow/refund-request') {
+    try {
+      const tips = dag.selectTips();
+      const result = marketplace.requestRefund(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/marketplace/escrow/refund-approve') {
+    try {
+      const tips = dag.selectTips();
+      const result = marketplace.approveRefund(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'GET' && path.startsWith('/api/v1/marketplace/escrow/status/')) {
+    const purchaseId = path.split('/api/v1/marketplace/escrow/status/')[1];
+    const status = marketplace.getEscrowStatus(purchaseId);
+    if (!status) return { status: 404, data: { error: 'Purchase not found' } };
+    return { status: 200, data: status };
+  }
+
+  // ---- P2P Sync Routes ----
+  if (method === 'GET' && path === '/api/v1/network/peers') {
+    return { status: 200, data: p2p.getPeers() };
+  }
+  if (method === 'POST' && path === '/api/v1/network/peers/add') {
+    if (!body?.url) return { status: 400, data: { error: 'url required' } };
+    const result = await p2p.addPeer(body.url);
+    return { status: result.success ? 200 : 400, data: result };
+  }
+  if (method === 'POST' && path === '/api/v1/network/sync') {
+    const result = await p2p.syncWithPeers();
+    return { status: 200, data: result };
+  }
+  if (method === 'GET' && path === '/api/v1/network/node-info') {
+    return { status: 200, data: p2p.getNodeInfo() };
+  }
+  // Peer-to-peer internal endpoints (called by other nodes)
+  if (method === 'POST' && path === '/api/v1/p2p/handshake') {
+    const result = p2p.handleHandshake(body);
+    return { status: 200, data: result };
+  }
+  if (method === 'POST' && path === '/api/v1/p2p/transactions') {
+    const result = p2p.handleIncomingTransactions(body?.transactions || []);
+    return { status: 200, data: result };
+  }
+  if (method === 'GET' && path === '/api/v1/p2p/state') {
+    return { status: 200, data: p2p.getStateDigest() };
   }
 
   return { status: 404, data: { error: 'Not found' } };

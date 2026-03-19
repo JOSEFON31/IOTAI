@@ -79,30 +79,36 @@ export class Marketplace {
   }
 
   /**
-   * Purchase a service - creates payment transfer + purchase record
-   * @returns {{ purchaseId: string, paymentTxId: string, recordTxId: string }}
+   * Purchase a service with escrow protection
+   * Funds go to escrow address, released when buyer confirms or auto-released after timeout
+   * @returns {{ purchaseId: string, paymentTxId: string, recordTxId: string, escrow: boolean }}
    */
-  purchase(wallet, tips, { listingId, message }) {
+  purchase(wallet, tips, { listingId, message, useEscrow = true }) {
     const listing = this.listings.get(listingId);
     if (!listing) throw new Error('Listing not found');
     if (listing.status !== 'active') throw new Error('Listing is not active');
     if (listing.seller === wallet.address) throw new Error('Cannot buy your own listing');
 
-    // Check balance
+    // Check balance (price + fee)
     const balance = this.dag.getBalance(wallet.address);
     if (balance < listing.price) throw new Error(`Insufficient balance. Need ${listing.price}, have ${balance}`);
 
-    // 1. Create payment transfer to seller
-    const paymentTx = wallet.send(listing.seller, listing.price, tips, {
+    const purchaseId = this._generateId();
+    const escrowAddr = useEscrow ? `iotai_escrow_${purchaseId}` : null;
+    const payTo = useEscrow ? escrowAddr : listing.seller;
+
+    // 1. Create payment transfer (to escrow or direct to seller)
+    const paymentTx = wallet.send(payTo, listing.price, tips, {
       _mp: 'payment',
       listingId,
+      purchaseId,
+      escrow: useEscrow,
       purpose: `Purchase: ${listing.title}`,
     });
     const payResult = this.dag.addTransaction(paymentTx);
     if (!payResult.success) throw new Error(payResult.error);
 
     // 2. Create purchase record (data tx)
-    const purchaseId = this._generateId();
     const tips2 = this.dag.selectTips();
     const recordTx = wallet.sendData(tips2, {
       _mp: 'purchase',
@@ -114,7 +120,9 @@ export class Marketplace {
       price: listing.price,
       title: listing.title,
       message: message || '',
-      status: 'completed',
+      status: useEscrow ? 'in_escrow' : 'completed',
+      escrowAddress: escrowAddr,
+      escrowDeadline: useEscrow ? Date.now() + (24 * 60 * 60 * 1000) : null, // 24h auto-release
       purchasedAt: Date.now(),
     });
     const recResult = this.dag.addTransaction(recordTx);
@@ -123,7 +131,158 @@ export class Marketplace {
     // Update index
     this._indexPurchase(recordTx);
 
-    return { purchaseId, paymentTxId: paymentTx.id, recordTxId: recordTx.id };
+    return { purchaseId, paymentTxId: paymentTx.id, recordTxId: recordTx.id, escrow: useEscrow };
+  }
+
+  // ============================================================
+  // ESCROW
+  // ============================================================
+
+  /**
+   * Buyer confirms delivery — releases escrow funds to seller
+   */
+  confirmDelivery(wallet, tips, { purchaseId }) {
+    const purchase = this._findPurchase(purchaseId);
+    if (!purchase) throw new Error('Purchase not found');
+    if (purchase.buyer !== wallet.address) throw new Error('Only buyer can confirm');
+    if (purchase.status !== 'in_escrow') throw new Error('Purchase not in escrow');
+
+    // Transfer from escrow to seller
+    const escrowBalance = this.dag.getBalance(purchase.escrowAddress);
+    if (escrowBalance < purchase.price) throw new Error('Escrow funds missing');
+
+    // Record the release on DAG
+    const tx = wallet.sendData(tips, {
+      _mp: 'escrow_release',
+      purchaseId,
+      listingId: purchase.listingId,
+      seller: purchase.seller,
+      amount: purchase.price,
+      releasedAt: Date.now(),
+    });
+    const result = this.dag.addTransaction(tx);
+    if (!result.success) throw new Error(result.error);
+
+    // Move funds: escrow -> seller
+    this.dag.balances.set(purchase.escrowAddress, 0);
+    const sellerBal = this.dag.balances.get(purchase.seller) || 0;
+    this.dag.balances.set(purchase.seller, sellerBal + purchase.price);
+
+    purchase.status = 'completed';
+    purchase.completedAt = Date.now();
+
+    return { txId: tx.id, released: purchase.price };
+  }
+
+  /**
+   * Buyer requests refund from escrow (before delivery confirmed)
+   */
+  requestRefund(wallet, tips, { purchaseId, reason }) {
+    const purchase = this._findPurchase(purchaseId);
+    if (!purchase) throw new Error('Purchase not found');
+    if (purchase.buyer !== wallet.address) throw new Error('Only buyer can request refund');
+    if (purchase.status !== 'in_escrow') throw new Error('Purchase not in escrow');
+
+    const tx = wallet.sendData(tips, {
+      _mp: 'escrow_refund_request',
+      purchaseId,
+      listingId: purchase.listingId,
+      reason: reason || 'Service not delivered',
+      requestedAt: Date.now(),
+    });
+    const result = this.dag.addTransaction(tx);
+    if (!result.success) throw new Error(result.error);
+
+    purchase.status = 'refund_requested';
+    purchase.refundReason = reason;
+
+    return { txId: tx.id };
+  }
+
+  /**
+   * Seller approves refund — returns escrow funds to buyer
+   */
+  approveRefund(wallet, tips, { purchaseId }) {
+    const purchase = this._findPurchase(purchaseId);
+    if (!purchase) throw new Error('Purchase not found');
+    if (purchase.seller !== wallet.address) throw new Error('Only seller can approve refund');
+    if (purchase.status !== 'refund_requested') throw new Error('No refund requested');
+
+    const tx = wallet.sendData(tips, {
+      _mp: 'escrow_refund',
+      purchaseId,
+      listingId: purchase.listingId,
+      buyer: purchase.buyer,
+      amount: purchase.price,
+      refundedAt: Date.now(),
+    });
+    const result = this.dag.addTransaction(tx);
+    if (!result.success) throw new Error(result.error);
+
+    // Move funds: escrow -> buyer
+    this.dag.balances.set(purchase.escrowAddress, 0);
+    const buyerBal = this.dag.balances.get(purchase.buyer) || 0;
+    this.dag.balances.set(purchase.buyer, buyerBal + purchase.price);
+
+    purchase.status = 'refunded';
+    purchase.refundedAt = Date.now();
+
+    return { txId: tx.id, refunded: purchase.price };
+  }
+
+  /**
+   * Auto-release expired escrows (called periodically)
+   * Releases funds to seller if buyer hasn't acted within deadline
+   */
+  processExpiredEscrows() {
+    const now = Date.now();
+    let released = 0;
+
+    for (const purchases of this.purchasesByListing.values()) {
+      for (const p of purchases) {
+        if (p.status === 'in_escrow' && p.escrowDeadline && now > p.escrowDeadline) {
+          const escrowBal = this.dag.getBalance(p.escrowAddress);
+          if (escrowBal >= p.price) {
+            this.dag.balances.set(p.escrowAddress, 0);
+            const sellerBal = this.dag.balances.get(p.seller) || 0;
+            this.dag.balances.set(p.seller, sellerBal + p.price);
+            p.status = 'completed';
+            p.completedAt = now;
+            p.autoReleased = true;
+            released++;
+          }
+        }
+      }
+    }
+    return { released };
+  }
+
+  /**
+   * Get escrow status for a purchase
+   */
+  getEscrowStatus(purchaseId) {
+    const purchase = this._findPurchase(purchaseId);
+    if (!purchase) return null;
+    return {
+      purchaseId,
+      status: purchase.status,
+      escrowAddress: purchase.escrowAddress,
+      escrowBalance: purchase.escrowAddress ? this.dag.getBalance(purchase.escrowAddress) : 0,
+      price: purchase.price,
+      buyer: purchase.buyer,
+      seller: purchase.seller,
+      deadline: purchase.escrowDeadline,
+      isExpired: purchase.escrowDeadline ? Date.now() > purchase.escrowDeadline : false,
+    };
+  }
+
+  /** Helper to find a purchase across all listings */
+  _findPurchase(purchaseId) {
+    for (const purchases of this.purchasesByListing.values()) {
+      const p = purchases.find(p => p.purchaseId === purchaseId);
+      if (p) return p;
+    }
+    return null;
   }
 
   /**
@@ -628,6 +787,8 @@ export class Marketplace {
       title: m.title,
       message: m.message,
       status: m.status,
+      escrowAddress: m.escrowAddress || null,
+      escrowDeadline: m.escrowDeadline || null,
       purchasedAt: m.purchasedAt || tx.timestamp,
     });
     this.purchasesByListing.set(m.listingId, list);
