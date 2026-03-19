@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: iotai-node
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node src/index.js --api-port 8080
+    envVars:
+      - key: NODE_ENV
+        value: production
+    healthCheckPath: /api/v1/network/stats
