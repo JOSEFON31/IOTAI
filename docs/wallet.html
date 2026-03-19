@@ -244,6 +244,7 @@
     <div id="challenge-instructions" class="status"></div>
 
     <button class="btn orange" id="btn-start-cam" onclick="startVerification()">Start Camera Verification</button>
+    <button class="btn green" id="btn-capture" onclick="manualCapture()" style="display:none;margin-top:8px">Take Photo Manually</button>
     <button class="btn" onclick="skipVerification()" style="margin-top:8px;background:var(--border)">Skip (0 tokens)</button>
   </div>
 
@@ -454,6 +455,7 @@ async function startVerification() {
 
     document.getElementById('camera-container').style.display = 'block';
     document.getElementById('liveness-progress').style.display = 'block';
+    document.getElementById('btn-capture').style.display = 'block';
     btn.style.display = 'none';
 
     const challengeLabels = {
@@ -690,10 +692,48 @@ async function submitClaim(descriptor) {
   }
 }
 
+async function manualCapture() {
+  const video = document.getElementById('video');
+  const btn = document.getElementById('btn-capture');
+  btn.disabled = true;
+  btn.textContent = 'Analyzing...';
+
+  try {
+    await loadFaceModels();
+    const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.1 });
+    const result = await faceapi.detectSingleFace(video, options)
+      .withFaceLandmarks(true)
+      .withFaceExpressions()
+      .withFaceDescriptor();
+
+    if (!result) {
+      setFaceStatus('No face detected. Look at the camera and try again.', 'fail');
+      btn.disabled = false;
+      btn.textContent = 'Take Photo Manually';
+      return;
+    }
+
+    const descriptor = Array.from(result.descriptor);
+    setStep('face', 'done');
+    setStep('center', 'done');
+    setStep('action', 'done');
+    setStep('done', 'done');
+    setFaceStatus('Face captured! Claiming tokens...', 'success');
+    setDetail('Submitting to blockchain...');
+    stopDetection();
+    await submitClaim(descriptor);
+  } catch (e) {
+    setFaceStatus('Error: ' + e.message, 'fail');
+    btn.disabled = false;
+    btn.textContent = 'Take Photo Manually';
+  }
+}
+
 function resetVerificationUI() {
   document.getElementById('btn-start-cam').style.display = 'block';
   document.getElementById('btn-start-cam').disabled = false;
   document.getElementById('btn-start-cam').textContent = 'Try Again';
+  document.getElementById('btn-capture').style.display = 'none';
   document.getElementById('camera-container').style.display = 'none';
   document.getElementById('liveness-progress').style.display = 'none';
   ['face', 'center', 'action', 'done'].forEach(s => setStep(s, ''));
