@@ -321,7 +321,13 @@ function serveStatic(res, pathname) {
   fp = fp.replace(/\.\./g, '');
   try {
     const content = readFileSync(resolve(DOCS_DIR, '.' + fp));
-    res.writeHead(200, { 'Content-Type': MIME[extname(fp)] || 'text/plain' });
+    const mime = MIME[extname(fp)] || 'text/plain';
+    const headers = { 'Content-Type': mime };
+    if (mime === 'application/pdf') {
+      headers['Content-Disposition'] = 'inline; filename="IOTAI-Whitepaper.pdf"';
+      headers['Content-Length'] = content.length;
+    }
+    res.writeHead(200, headers);
     res.end(content);
   } catch {
     try {
