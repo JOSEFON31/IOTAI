@@ -193,17 +193,53 @@ async function handleAPI(req, path, body) {
 
   // Public
   if (method === 'POST' && path === '/api/v1/wallet/create') {
-    const w = body?.passphrase ? new Wallet({ passphrase: body.passphrase }) : new Wallet();
+    // New: always generate seed phrase unless legacy passphrase provided
+    let w;
+    if (body?.passphrase) {
+      w = new Wallet({ passphrase: body.passphrase });
+    } else {
+      w = Wallet.createWithSeedPhrase();
+    }
     const token = genToken();
     sessions.set(token, { wallet: w, expiresAt: Date.now() + TOKEN_TTL });
-    return { status: 201, data: { address: w.address, publicKey: encodePublicKey(w.publicKey), token, expiresIn: TOKEN_TTL } };
+    return { status: 201, data: {
+      address: w.address,
+      publicKey: encodePublicKey(w.publicKey),
+      token,
+      expiresIn: TOKEN_TTL,
+      seedPhrase: w.mnemonic || null,
+    }};
+  }
+  if (method === 'POST' && path === '/api/v1/wallet/restore') {
+    if (!body?.mnemonic) return { status: 400, data: { error: 'mnemonic (12-word seed phrase) required' } };
+    try {
+      const w = Wallet.fromMnemonic(body.mnemonic);
+      const token = genToken();
+      sessions.set(token, { wallet: w, expiresAt: Date.now() + TOKEN_TTL });
+      return { status: 200, data: {
+        address: w.address,
+        publicKey: encodePublicKey(w.publicKey),
+        token,
+        expiresIn: TOKEN_TTL,
+        balance: dag.getBalance(w.address),
+      }};
+    } catch (e) {
+      return { status: 400, data: { error: e.message } };
+    }
   }
   if (method === 'POST' && path === '/api/v1/auth/token') {
-    if (!body?.passphrase) return { status: 400, data: { error: 'passphrase required' } };
-    const w = new Wallet({ passphrase: body.passphrase });
+    // Support both passphrase (legacy) and mnemonic
+    let w;
+    if (body?.mnemonic) {
+      try { w = Wallet.fromMnemonic(body.mnemonic); } catch (e) { return { status: 400, data: { error: e.message } }; }
+    } else if (body?.passphrase) {
+      w = new Wallet({ passphrase: body.passphrase });
+    } else {
+      return { status: 400, data: { error: 'mnemonic or passphrase required' } };
+    }
     const token = genToken();
     sessions.set(token, { wallet: w, expiresAt: Date.now() + TOKEN_TTL });
-    return { status: 200, data: { address: w.address, token, expiresIn: TOKEN_TTL } };
+    return { status: 200, data: { address: w.address, token, expiresIn: TOKEN_TTL, balance: dag.getBalance(w.address) } };
   }
   if (method === 'GET' && path === '/api/v1/network/stats') {
     return { status: 200, data: { ...dag.getStats(), faucet: faucet.getStatus(), storage: storage.getStats() } };

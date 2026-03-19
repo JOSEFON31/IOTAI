@@ -19,15 +19,37 @@ import {
   encodePublicKey,
 } from '../core/crypto.js';
 import { createTransaction, createDataTransaction } from '../core/transaction.js';
+import { generateMnemonic, mnemonicToSeed, validateMnemonic } from '../core/mnemonic.js';
 
 export class Wallet {
   /**
    * Create a new wallet
    * @param {object} [options]
-   * @param {string} [options.passphrase] - derive from passphrase (deterministic)
+   * @param {string} [options.passphrase] - derive from passphrase (deterministic, legacy)
+   * @param {string} [options.mnemonic] - restore from 12-word seed phrase
+   * @param {boolean} [options.generateSeedPhrase] - generate new seed phrase
    */
   constructor(options = {}) {
-    if (options.passphrase) {
+    this.mnemonic = null;
+
+    if (options.mnemonic) {
+      // Restore from existing seed phrase
+      const check = validateMnemonic(options.mnemonic);
+      if (!check.valid) throw new Error(check.error);
+      this.mnemonic = options.mnemonic.trim().toLowerCase();
+      this.masterSeed = mnemonicToSeed(this.mnemonic);
+      const pair = deriveKeyPair(this.masterSeed, 0);
+      this.publicKey = pair.publicKey;
+      this.secretKey = pair.secretKey;
+    } else if (options.generateSeedPhrase) {
+      // Generate new wallet with seed phrase
+      this.mnemonic = generateMnemonic();
+      this.masterSeed = mnemonicToSeed(this.mnemonic);
+      const pair = deriveKeyPair(this.masterSeed, 0);
+      this.publicKey = pair.publicKey;
+      this.secretKey = pair.secretKey;
+    } else if (options.passphrase) {
+      // Legacy passphrase mode
       this.masterSeed = seedFromPassphrase(options.passphrase);
       const pair = deriveKeyPair(this.masterSeed, 0);
       this.publicKey = pair.publicKey;
@@ -41,6 +63,23 @@ export class Wallet {
 
     this.address = publicKeyToAddress(this.publicKey);
     this.derivationIndex = 0;
+  }
+
+  /**
+   * Create a new wallet with a seed phrase
+   * @returns {Wallet}
+   */
+  static createWithSeedPhrase() {
+    return new Wallet({ generateSeedPhrase: true });
+  }
+
+  /**
+   * Restore a wallet from a 12-word seed phrase
+   * @param {string} mnemonic
+   * @returns {Wallet}
+   */
+  static fromMnemonic(mnemonic) {
+    return new Wallet({ mnemonic });
   }
 
   /**
