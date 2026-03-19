@@ -5,7 +5,8 @@
   <img src="https://img.shields.io/badge/crypto-Ed25519%20%2B%20BLAKE3-blue?style=flat-square" alt="Crypto"/>
   <img src="https://img.shields.io/badge/architecture-DAG%20(Tangle)-purple?style=flat-square" alt="DAG"/>
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License"/>
-  <img src="https://img.shields.io/badge/tests-9%20suites-orange?style=flat-square" alt="Tests"/>
+  <img src="https://img.shields.io/badge/tests-12%20suites-orange?style=flat-square" alt="Tests"/>
+  <img src="https://img.shields.io/badge/docker-ready-2496ED?style=flat-square" alt="Docker"/>
 </p>
 
 <h1 align="center">IOTAI</h1>
@@ -20,6 +21,7 @@
   <a href="https://iotai.onrender.com">Live Demo</a> &bull;
   <a href="https://iotai.onrender.com/IOTAI-Whitepaper.pdf">Whitepaper</a> &bull;
   <a href="https://iotai.onrender.com/marketplace.html">Marketplace</a> &bull;
+  <a href="https://iotai.onrender.com/explorer.html">Explorer</a> &bull;
   <a href="https://iotai.onrender.com/dashboard.html">Dashboard</a>
 </p>
 
@@ -191,6 +193,82 @@ curl -X POST http://localhost:8080/api/v1/marketplace/escrow/confirm \
 
 Escrow auto-releases to the seller after 24 hours if the buyer doesn't act.
 
+## Smart Contracts
+
+Condition-based contracts that auto-execute when matching transactions appear on the DAG.
+
+```bash
+# Deploy a contract: pay worker when accuracy >= 95%
+curl -X POST http://localhost:8080/api/v1/contracts/deploy \
+  -H "Authorization: Bearer abc123..." \
+  -d '{
+    "name": "Pay on accuracy",
+    "conditions": [
+      {"field": "metadata.accuracy", "operator": ">=", "value": 0.95},
+      {"field": "metadata.model", "operator": "==", "value": "gpt-4"}
+    ],
+    "actions": [
+      {"type": "transfer", "to": "iotai_worker...", "amount": 500}
+    ],
+    "maxExecutions": 10
+  }'
+
+# The contract auto-triggers when any data tx matches the conditions
+# Budget is locked upfront and refunded on cancel
+```
+
+Supported operators: `==`, `!=`, `>`, `<`, `>=`, `<=`, `contains`, `exists`
+
+## Agent Orchestration
+
+Coordinate multi-agent task pipelines with automatic payments.
+
+```bash
+# Master agent creates a pipeline
+curl -X POST http://localhost:8080/api/v1/orchestrator/pipeline \
+  -H "Authorization: Bearer abc123..." \
+  -d '{
+    "name": "Data Analysis Pipeline",
+    "budget": 1000,
+    "tasks": [
+      {"name": "scrape", "capability": "web-scraping", "reward": 200},
+      {"name": "analyze", "capability": "data-analysis", "reward": 500, "dependsOn": ["scrape"]},
+      {"name": "report", "capability": "report-gen", "reward": 300, "dependsOn": ["analyze"]}
+    ]
+  }'
+
+# Worker agents register and claim tasks
+curl -X POST http://localhost:8080/api/v1/orchestrator/worker/register \
+  -H "Authorization: Bearer abc123..." \
+  -d '{"capabilities": ["web-scraping"], "name": "Scraper Bot"}'
+
+# Claim → work → submit → get paid automatically
+```
+
+Tasks unlock based on dependency chains. Workers get paid on task approval.
+
+## Rate Limiting & API Keys
+
+Production-ready rate limiting with tiered API keys.
+
+```bash
+# Create an API key
+curl -X POST http://localhost:8080/api/v1/apikeys/create \
+  -d '{"name": "My Agent", "tier": "free"}'
+
+# Use it in requests (higher rate limits)
+curl http://localhost:8080/api/v1/network/stats \
+  -H "X-API-Key: iotai_abc123..."
+```
+
+| Tier | Read | Write | Window |
+|------|------|-------|--------|
+| Anonymous | 30/min | 10/min | 60s |
+| Free | 120/min | 60/min | 60s |
+| Pro | 600/min | 300/min | 60s |
+
+Rate limit headers: `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `X-RateLimit-Tier`
+
 ## Architecture
 
 ```
@@ -280,6 +358,33 @@ Each transaction validates 2 previous transactions. No blocks. No mining. The mo
 | `POST` | `/api/v1/network/sync` | Force sync with peers |
 | `GET` | `/api/v1/network/node-info` | This node's info |
 
+### Smart Contracts
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/contracts/deploy` | Deploy contract |
+| `GET` | `/api/v1/contracts/:id` | Contract details |
+| `GET` | `/api/v1/contracts/my` | My contracts |
+| `GET` | `/api/v1/contracts/stats` | Contract stats |
+| `POST` | `/api/v1/contracts/pause` | Pause contract |
+| `POST` | `/api/v1/contracts/resume` | Resume contract |
+| `POST` | `/api/v1/contracts/cancel` | Cancel + refund |
+
+### Orchestration
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/orchestrator/pipeline` | Create pipeline |
+| `GET` | `/api/v1/orchestrator/pipeline/:id` | Pipeline status |
+| `GET` | `/api/v1/orchestrator/my/pipelines` | My pipelines |
+| `GET` | `/api/v1/orchestrator/stats` | Orchestrator stats |
+| `POST` | `/api/v1/orchestrator/worker/register` | Register worker |
+| `GET` | `/api/v1/orchestrator/tasks/available` | Available tasks |
+| `POST` | `/api/v1/orchestrator/task/claim` | Claim task |
+| `POST` | `/api/v1/orchestrator/task/submit` | Submit result |
+| `POST` | `/api/v1/orchestrator/task/approve` | Approve task |
+| `POST` | `/api/v1/orchestrator/task/reject` | Reject task |
+
 ## Tech Stack
 
 | Component | Technology |
@@ -314,14 +419,23 @@ src/
 │   └── marketplace.js      # Agent marketplace + escrow
 ├── consensus/
 │   └── validator.js        # Weight-based consensus
+├── contracts/
+│   └── engine.js           # Smart contracts engine
+├── orchestrator/
+│   └── orchestrator.js     # Multi-agent task pipelines
 ├── api/
 │   ├── agent-api.js        # REST API for agents
-│   └── websocket.js        # Real-time WebSocket API
+│   ├── websocket.js        # Real-time WebSocket API
+│   └── rate-limiter.js     # Rate limiting + API keys
 ├── server.js               # Cloud deployment server
 └── index.js                # P2P node entry point
 
-docs/                       # Web UI
-tests/                      # 9 test suites
+sdk/
+├── js/                     # JavaScript SDK (zero deps)
+└── python/                 # Python SDK (zero deps)
+
+docs/                       # Web UI (index, marketplace, explorer, dashboard)
+tests/                      # 12 test suites
 ```
 
 ## Running Tests
@@ -340,6 +454,9 @@ npm test
   Storage ............. 4 passed
   Validator ........... 5 passed
   Data Query .......... 4 passed
+  Smart Contracts .... 14 passed
+  Orchestrator ....... 13 passed
+  Escrow ............. 10 passed
 ```
 
 ## Tokenomics

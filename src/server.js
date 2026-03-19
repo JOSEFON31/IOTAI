@@ -28,6 +28,7 @@ import { Marketplace } from './marketplace/marketplace.js';
 import { P2PSync } from './network/p2p.js';
 import { ContractEngine } from './contracts/engine.js';
 import { Orchestrator } from './orchestrator/orchestrator.js';
+import { RateLimiter } from './api/rate-limiter.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DOCS_DIR = resolve(__dirname, '../docs');
@@ -40,6 +41,7 @@ const storage = new Storage({ dag, faucet, autoSaveInterval: 30000 });
 let marketplace; // initialized after DAG loads
 let contracts;   // initialized after DAG loads
 let orchestrator; // initialized after DAG loads
+const rateLimiter = new RateLimiter();
 const p2p = new P2PSync({
   dag,
   nodeUrl: process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`,
@@ -218,6 +220,20 @@ const server = createServer(async (req, res) => {
 
     // ---- API Routes ----
     if (path.startsWith('/api/')) {
+      // Rate limiting
+      const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+      const apiKey = req.headers['x-api-key'] || null;
+      const isWrite = req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE';
+      const rateResult = rateLimiter.check({ ip: clientIp, apiKey, isWrite });
+      const rateHeaders = rateLimiter.getHeaders(rateResult);
+      for (const [k, v] of Object.entries(rateHeaders)) res.setHeader(k, v);
+
+      if (!rateResult.allowed) {
+        res.writeHead(429, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: rateResult.error }));
+        return;
+      }
+
       const body = await readBody(req);
       const result = await handleAPI(req, path, body);
       res.writeHead(result.status, { 'Content-Type': 'application/json' });
@@ -350,6 +366,21 @@ async function handleAPI(req, path, body) {
   }
   if (method === 'GET' && path === '/api/v1/orchestrator/workers') {
     return { status: 200, data: orchestrator.getWorkers() };
+  }
+  // ---- API Key Management (public) ----
+  if (method === 'POST' && path === '/api/v1/apikeys/create') {
+    const key = rateLimiter.createApiKey({ name: body?.name, tier: body?.tier || 'free', owner: body?.owner });
+    return { status: 200, data: key };
+  }
+  if (method === 'GET' && path === '/api/v1/apikeys/info') {
+    const apiKey = req.headers?.['x-api-key'];
+    if (!apiKey) return { status: 400, data: { error: 'X-API-Key header required' } };
+    const info = rateLimiter.getKeyInfo(apiKey);
+    if (!info) return { status: 404, data: { error: 'Key not found' } };
+    return { status: 200, data: info };
+  }
+  if (method === 'GET' && path === '/api/v1/ratelimit/stats') {
+    return { status: 200, data: rateLimiter.getStats() };
   }
   if (method === 'GET' && path.startsWith('/api/v1/marketplace/listing/')) {
     const id = path.split('/api/v1/marketplace/listing/')[1];
