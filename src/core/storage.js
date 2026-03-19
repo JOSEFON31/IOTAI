@@ -40,6 +40,7 @@ export class Storage {
     this.githubSha = null; // SHA of the file on GitHub (needed for updates)
     this.githubEnabled = !!GITHUB_TOKEN;
     this.saving = false;
+    this.githubSaving = false; // lock for GitHub saves
 
     if (!existsSync(DATA_DIR)) {
       mkdirSync(DATA_DIR, { recursive: true });
@@ -187,9 +188,13 @@ export class Storage {
   }
 
   async _saveToGithub(state) {
-    if (!this.githubEnabled) return;
+    if (!this.githubEnabled || this.githubSaving) return;
+    this.githubSaving = true;
 
     try {
+      // Always fetch fresh SHA before saving to avoid conflicts
+      await this._fetchGithubSha();
+
       const content = Buffer.from(JSON.stringify(state)).toString('base64');
       const body = {
         message: `[auto] Save state: ${state.transactions.length} txs, ${new Date().toISOString()}`,
@@ -217,16 +222,16 @@ export class Storage {
         console.log(`[Storage] GitHub save OK (${state.transactions.length} txs)`);
       } else {
         const errText = await res.text();
-        // If SHA conflict, fetch current SHA and retry
         if (res.status === 409 || res.status === 422) {
-          console.log('[Storage] GitHub SHA conflict, refreshing...');
-          await this._fetchGithubSha();
+          console.log('[Storage] GitHub SHA conflict, will retry next cycle');
         } else {
           console.error(`[Storage] GitHub save error ${res.status}: ${errText.substring(0, 200)}`);
         }
       }
     } catch (err) {
       console.error('[Storage] GitHub save error:', err.message);
+    } finally {
+      this.githubSaving = false;
     }
   }
 
