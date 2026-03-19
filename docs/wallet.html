@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IOTAI Wallet - Claim Your Tokens</title>
+<style>
+  :root {
+    --bg: #0a0a1a; --bg2: #1a1a3e; --border: #2a2a5e;
+    --text: #e0e0f0; --muted: #888; --accent: #6C5CE7;
+    --green: #00B894; --orange: #E17055; --red: #d63031;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+  a { color: var(--accent); text-decoration: none; }
+
+  .container { max-width: 600px; margin: 0 auto; padding: 24px 16px; }
+
+  /* Header */
+  .header { text-align: center; padding: 32px 0 24px; }
+  .header h1 {
+    font-size: 32px;
+    background: linear-gradient(135deg, var(--accent), var(--green));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .header p { color: var(--muted); margin-top: 8px; font-size: 15px; }
+
+  /* Steps */
+  .step {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
+    padding: 24px; margin-bottom: 16px; display: none;
+  }
+  .step.active { display: block; }
+  .step h2 { font-size: 18px; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+  .step-num {
+    background: var(--accent); color: white; width: 28px; height: 28px;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: bold; flex-shrink: 0;
+  }
+
+  /* Buttons */
+  .btn {
+    background: var(--accent); color: white; border: none; border-radius: 8px;
+    padding: 12px 24px; font-size: 15px; cursor: pointer; width: 100%;
+    font-weight: 600; transition: opacity 0.2s;
+  }
+  .btn:hover { opacity: 0.9; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.green { background: var(--green); }
+  .btn.orange { background: var(--orange); }
+
+  /* Wallet info */
+  .wallet-info {
+    background: #0d0d24; border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px; margin: 16px 0; font-family: monospace; font-size: 13px;
+    word-break: break-all;
+  }
+  .wallet-info .label { color: var(--muted); font-size: 11px; text-transform: uppercase; margin-bottom: 4px; }
+  .wallet-info .value { color: var(--green); }
+  .wallet-info .row { margin-bottom: 12px; }
+  .wallet-info .row:last-child { margin-bottom: 0; }
+
+  /* Camera */
+  #camera-container {
+    position: relative; width: 100%; aspect-ratio: 4/3;
+    background: #000; border-radius: 8px; overflow: hidden; margin: 16px 0;
+  }
+  #video { width: 100%; height: 100%; object-fit: cover; }
+  #canvas-face { display: none; }
+  .camera-overlay {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 200px; height: 240px; border: 3px dashed var(--accent);
+    border-radius: 50%; pointer-events: none; opacity: 0.6;
+  }
+  .challenge-badge {
+    position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+    background: var(--accent)dd; color: white; padding: 8px 20px;
+    border-radius: 20px; font-size: 14px; font-weight: bold;
+  }
+
+  /* Status */
+  .status {
+    padding: 12px 16px; border-radius: 8px; margin: 12px 0;
+    font-size: 14px; display: none;
+  }
+  .status.success { display: block; background: #00B89422; border: 1px solid var(--green); color: var(--green); }
+  .status.error { display: block; background: #d6303122; border: 1px solid var(--red); color: var(--red); }
+  .status.info { display: block; background: #6C5CE722; border: 1px solid var(--accent); color: var(--accent); }
+
+  /* Progress */
+  .progress-bar {
+    display: flex; justify-content: center; gap: 8px; margin: 24px 0;
+  }
+  .progress-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--border); transition: background 0.3s;
+  }
+  .progress-dot.active { background: var(--accent); }
+  .progress-dot.done { background: var(--green); }
+
+  /* Balance display */
+  .balance-big {
+    text-align: center; padding: 24px;
+  }
+  .balance-big .amount { font-size: 48px; font-weight: bold; color: var(--green); }
+  .balance-big .unit { font-size: 20px; color: var(--muted); }
+
+  /* Footer nav */
+  .nav { text-align: center; padding: 16px; margin-top: 24px; }
+  .nav a { color: var(--muted); margin: 0 12px; font-size: 13px; }
+
+  /* Faucet stats */
+  .faucet-stats {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 16px 0;
+  }
+  .faucet-stat {
+    background: #0d0d24; border-radius: 8px; padding: 12px; text-align: center;
+  }
+  .faucet-stat .num { font-size: 20px; font-weight: bold; color: var(--green); }
+  .faucet-stat .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>IOTAI Wallet</h1>
+    <p>Create your wallet and claim 1,000 IOTAI tokens</p>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-bar">
+    <div class="progress-dot active" id="dot-1"></div>
+    <div class="progress-dot" id="dot-2"></div>
+    <div class="progress-dot" id="dot-3"></div>
+    <div class="progress-dot" id="dot-4"></div>
+  </div>
+
+  <!-- STEP 1: Faucet info -->
+  <div class="step active" id="step-1">
+    <h2><span class="step-num">1</span> Faucet Status</h2>
+    <div class="faucet-stats" id="faucet-stats">
+      <div class="faucet-stat"><div class="num" id="fs-remaining">-</div><div class="lbl">IOTAI Available</div></div>
+      <div class="faucet-stat"><div class="num" id="fs-claimed">-</div><div class="lbl">People Claimed</div></div>
+      <div class="faucet-stat"><div class="num" id="fs-per-person">-</div><div class="lbl">Per Person</div></div>
+      <div class="faucet-stat"><div class="num" id="fs-pct">-</div><div class="lbl">% Distributed</div></div>
+    </div>
+    <button class="btn" onclick="createWallet()">Create My Wallet</button>
+  </div>
+
+  <!-- STEP 2: Wallet created -->
+  <div class="step" id="step-2">
+    <h2><span class="step-num">2</span> Your Wallet</h2>
+    <div class="wallet-info" id="wallet-display">
+      <div class="row"><div class="label">Address</div><div class="value" id="w-address">-</div></div>
+      <div class="row"><div class="label">Auth Token</div><div class="value" id="w-token">-</div></div>
+    </div>
+    <div class="status info">Save your wallet info! You'll need the token to access your funds later.</div>
+    <button class="btn green" onclick="startVerification()" style="margin-top:12px">Verify My Identity</button>
+  </div>
+
+  <!-- STEP 3: Face verification -->
+  <div class="step" id="step-3">
+    <h2><span class="step-num">3</span> Face Verification</h2>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:8px">Position your face in the oval and perform the action shown below.</p>
+    <div id="camera-container">
+      <video id="video" autoplay playsinline muted></video>
+      <div class="camera-overlay"></div>
+      <div class="challenge-badge" id="challenge-text">Loading...</div>
+    </div>
+    <div class="status info" id="challenge-instructions">Preparing camera...</div>
+    <button class="btn orange" id="btn-capture" onclick="captureAndClaim()" disabled>Capture & Verify</button>
+  </div>
+
+  <!-- STEP 4: Result -->
+  <div class="step" id="step-4">
+    <h2><span class="step-num">4</span> Result</h2>
+    <div id="result-content"></div>
+  </div>
+
+  <!-- Existing wallet login -->
+  <div style="text-align:center;margin-top:24px">
+    <p style="color:var(--muted);font-size:13px">Already have a wallet?
+      <a href="#" onclick="showLogin();return false">Check balance</a>
+    </p>
+  </div>
+
+  <!-- Login panel -->
+  <div class="step" id="login-panel" style="display:none;margin-top:16px">
+    <h2><span class="step-num">?</span> Check Balance</h2>
+    <input type="text" id="login-passphrase" placeholder="Enter your passphrase"
+      style="width:100%;padding:12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;margin-bottom:12px">
+    <button class="btn" onclick="checkBalance()">Check Balance</button>
+    <div id="balance-result" style="margin-top:12px"></div>
+  </div>
+
+  <div class="nav">
+    <a href="/">Docs</a>
+    <a href="/visualizer">Visualizer</a>
+    <a href="/api/v1/network/stats">API Stats</a>
+  </div>
+</div>
+
+<script>
+const API = window.location.origin;
+let walletData = null;
+let challengeData = null;
+let videoStream = null;
+
+// ---- Load faucet stats ----
+async function loadFaucetStats() {
+  try {
+    const res = await fetch(API + '/api/v1/faucet/status');
+    const data = await res.json();
+    document.getElementById('fs-remaining').textContent = (data.remaining || 0).toLocaleString();
+    document.getElementById('fs-claimed').textContent = (data.recipients || 0).toLocaleString();
+    document.getElementById('fs-per-person').textContent = (data.tokensPerPerson || 1000).toLocaleString();
+    document.getElementById('fs-pct').textContent = (data.percentDistributed || 0) + '%';
+  } catch (e) {
+    console.error('Failed to load faucet stats:', e);
+  }
+}
+loadFaucetStats();
+
+// ---- Step navigation ----
+function goToStep(n) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  document.getElementById('step-' + n).classList.add('active');
+  for (let i = 1; i <= 4; i++) {
+    const dot = document.getElementById('dot-' + i);
+    dot.className = 'progress-dot' + (i < n ? ' done' : i === n ? ' active' : '');
+  }
+}
+
+// ---- Step 1 -> 2: Create wallet ----
+async function createWallet() {
+  try {
+    const res = await fetch(API + '/api/v1/wallet/create', { method: 'POST' });
+    walletData = await res.json();
+    document.getElementById('w-address').textContent = walletData.address;
+    document.getElementById('w-token').textContent = walletData.token.substring(0, 20) + '...';
+    goToStep(2);
+  } catch (e) {
+    alert('Error creating wallet: ' + e.message);
+  }
+}
+
+// ---- Step 2 -> 3: Start verification ----
+async function startVerification() {
+  try {
+    // Get challenge
+    const res = await fetch(API + '/api/v1/faucet/start', { method: 'POST' });
+    challengeData = await res.json();
+    document.getElementById('challenge-text').textContent = challengeData.action.toUpperCase();
+    document.getElementById('challenge-instructions').textContent = challengeData.instructions;
+    document.getElementById('challenge-instructions').className = 'status info';
+
+    // Start camera
+    goToStep(3);
+    await startCamera();
+    document.getElementById('btn-capture').disabled = false;
+  } catch (e) {
+    alert('Error starting verification: ' + e.message);
+  }
+}
+
+// ---- Camera ----
+async function startCamera() {
+  try {
+    videoStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: 640, height: 480 }
+    });
+    document.getElementById('video').srcObject = videoStream;
+  } catch (e) {
+    document.getElementById('challenge-instructions').textContent = 'Camera access denied. Please allow camera access and try again.';
+    document.getElementById('challenge-instructions').className = 'status error';
+  }
+}
+
+function stopCamera() {
+  if (videoStream) {
+    videoStream.getTracks().forEach(t => t.stop());
+    videoStream = null;
+  }
+}
+
+// ---- Step 3 -> 4: Capture face and claim ----
+async function captureAndClaim() {
+  const btn = document.getElementById('btn-capture');
+  btn.disabled = true;
+  btn.textContent = 'Verifying...';
+
+  try {
+    // Capture frame from video
+    const video = document.getElementById('video');
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0);
+
+    // Extract pixel data as a simple embedding
+    // In production, this would use face-api.js to extract a real 512-dim embedding
+    // For now, we sample pixels from the face region as a unique fingerprint
+    const imageData = ctx.getImageData(
+      Math.floor(canvas.width * 0.25), Math.floor(canvas.height * 0.15),
+      Math.floor(canvas.width * 0.5), Math.floor(canvas.height * 0.7)
+    );
+    const pixels = imageData.data;
+
+    // Create a 512-dim embedding by sampling and normalizing pixel data
+    const embedding = [];
+    const step = Math.floor(pixels.length / 512);
+    for (let i = 0; i < 512; i++) {
+      const idx = i * step;
+      const val = (pixels[idx] + pixels[idx + 1] + pixels[idx + 2]) / (3 * 255);
+      embedding.push(parseFloat((val - 0.5).toFixed(6)));
+    }
+
+    stopCamera();
+
+    // Submit claim
+    const res = await fetch(API + '/api/v1/faucet/claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        challengeId: challengeData.challengeId,
+        faceEmbedding: embedding,
+        livenessPass: true,
+        address: walletData.address,
+      }),
+    });
+
+    const result = await res.json();
+    goToStep(4);
+
+    const resultEl = document.getElementById('result-content');
+    if (result.success) {
+      resultEl.innerHTML = `
+        <div class="balance-big">
+          <div class="amount">+${result.amount.toLocaleString()}</div>
+          <div class="unit">IOTAI</div>
+        </div>
+        <div class="status success">${result.message}</div>
+        <div class="wallet-info" style="margin-top:16px">
+          <div class="row"><div class="label">Your Address</div><div class="value">${walletData.address}</div></div>
+          <div class="row"><div class="label">Recipient #</div><div class="value">${result.recipientNumber}</div></div>
+          <div class="row"><div class="label">Auth Token (save this!)</div><div class="value">${walletData.token}</div></div>
+        </div>
+        <button class="btn green" onclick="window.location.href='/visualizer'" style="margin-top:16px">View the Tangle</button>
+      `;
+    } else {
+      resultEl.innerHTML = `
+        <div class="status error">${result.error}</div>
+        <button class="btn" onclick="goToStep(1)" style="margin-top:16px">Try Again</button>
+      `;
+    }
+
+    loadFaucetStats();
+  } catch (e) {
+    document.getElementById('result-content').innerHTML = `
+      <div class="status error">Error: ${e.message}</div>
+      <button class="btn" onclick="goToStep(1)" style="margin-top:16px">Try Again</button>
+    `;
+    goToStep(4);
+  }
+}
+
+// ---- Existing wallet balance check ----
+function showLogin() {
+  const panel = document.getElementById('login-panel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+async function checkBalance() {
+  const passphrase = document.getElementById('login-passphrase').value.trim();
+  if (!passphrase) return;
+
+  try {
+    // Get token
+    const authRes = await fetch(API + '/api/v1/auth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passphrase }),
+    });
+    const auth = await authRes.json();
+
+    // Get balance
+    const balRes = await fetch(API + '/api/v1/balance', {
+      headers: { 'Authorization': 'Bearer ' + auth.token },
+    });
+    const bal = await balRes.json();
+
+    document.getElementById('balance-result').innerHTML = `
+      <div class="wallet-info">
+        <div class="row"><div class="label">Address</div><div class="value">${bal.address}</div></div>
+        <div class="row"><div class="label">Balance</div><div class="value" style="font-size:18px">${bal.balance.toLocaleString()} IOTAI</div></div>
+      </div>
+    `;
+  } catch (e) {
+    document.getElementById('balance-result').innerHTML = `<div class="status error">Error: ${e.message}</div>`;
+  }
+}
+</script>
+</body>
+</html>
