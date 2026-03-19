@@ -23,6 +23,7 @@ import {
 } from './core/crypto.js';
 import { verifyTransaction } from './core/transaction.js';
 import { IOTAIWebSocket } from './api/websocket.js';
+import { Marketplace } from './marketplace/marketplace.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DOCS_DIR = resolve(__dirname, '../docs');
@@ -32,6 +33,7 @@ const PORT = parseInt(process.env.PORT || '8080', 10);
 const dag = new DAG();
 const faucet = new Faucet(dag);
 const storage = new Storage({ dag, faucet, autoSaveInterval: 30000 });
+let marketplace; // initialized after DAG loads
 
 // Sessions: token -> { wallet, expiresAt }
 const sessions = new Map();
@@ -81,6 +83,9 @@ async function initialize() {
   }
 
   storage.start();
+
+  // Initialize marketplace index
+  marketplace = new Marketplace({ dag });
 }
 
 await initialize();
@@ -260,6 +265,27 @@ async function handleAPI(req, path, body) {
     return { status: result.success ? 200 : 400, data: result };
   }
 
+  // ---- Marketplace Public Routes ----
+  if (method === 'GET' && path === '/api/v1/marketplace/listings') {
+    const url = new URL(req.url, `http://localhost:${PORT}`);
+    const params = Object.fromEntries(url.searchParams);
+    if (params.limit) params.limit = parseInt(params.limit, 10);
+    if (params.offset) params.offset = parseInt(params.offset, 10);
+    return { status: 200, data: marketplace.getListings(params) };
+  }
+  if (method === 'GET' && path === '/api/v1/marketplace/categories') {
+    return { status: 200, data: marketplace.getCategories() };
+  }
+  if (method === 'GET' && path === '/api/v1/marketplace/stats') {
+    return { status: 200, data: marketplace.getStats() };
+  }
+  if (method === 'GET' && path.startsWith('/api/v1/marketplace/listing/')) {
+    const id = path.split('/api/v1/marketplace/listing/')[1];
+    const listing = marketplace.getListing(id);
+    if (!listing) return { status: 404, data: { error: 'Listing not found' } };
+    return { status: 200, data: listing };
+  }
+
   // Auth required
   const session = authenticate(req);
   if (!session) return { status: 401, data: { error: 'Invalid or expired token' } };
@@ -292,6 +318,42 @@ async function handleAPI(req, path, body) {
     const txId = path.split('/api/v1/tx/')[1];
     const tx = dag.getTransaction(txId);
     return tx ? { status: 200, data: tx } : { status: 404, data: { error: 'Not found' } };
+  }
+
+  // ---- Marketplace Auth Routes ----
+  if (method === 'POST' && path === '/api/v1/marketplace/list') {
+      try {
+        const tips = dag.selectTips();
+        const result = marketplace.createListing(session.wallet, tips, body);
+        return { status: 201, data: result };
+      } catch (e) { return { status: 400, data: { error: e.message } }; }
+    }
+    if (method === 'POST' && path === '/api/v1/marketplace/buy') {
+      try {
+        const tips = dag.selectTips();
+        const result = marketplace.purchase(session.wallet, tips, body);
+        return { status: 200, data: result };
+      } catch (e) { return { status: 400, data: { error: e.message } }; }
+    }
+    if (method === 'POST' && path === '/api/v1/marketplace/review') {
+      try {
+        const tips = dag.selectTips();
+        const result = marketplace.review(session.wallet, tips, body);
+        return { status: 200, data: result };
+      } catch (e) { return { status: 400, data: { error: e.message } }; }
+    }
+    if (method === 'POST' && path === '/api/v1/marketplace/update') {
+      try {
+        const tips = dag.selectTips();
+        const result = marketplace.updateListing(session.wallet, tips, body);
+        return { status: 200, data: result };
+      } catch (e) { return { status: 400, data: { error: e.message } }; }
+    }
+    if (method === 'GET' && path === '/api/v1/marketplace/my/listings') {
+      return { status: 200, data: marketplace.getListings({ seller: session.wallet.address, status: null }) };
+    }
+  if (method === 'GET' && path === '/api/v1/marketplace/my/purchases') {
+    return { status: 200, data: marketplace.getPurchases(session.wallet.address) };
   }
 
   return { status: 404, data: { error: 'Not found' } };
