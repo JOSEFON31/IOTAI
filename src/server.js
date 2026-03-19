@@ -13,6 +13,7 @@ import { fileURLToPath } from 'url';
 import { DAG } from './core/dag.js';
 import { Wallet } from './wallet/wallet.js';
 import { Faucet } from './core/faucet.js';
+import { Storage } from './core/storage.js';
 import {
   hash,
   generateNonce,
@@ -28,14 +29,23 @@ const PORT = parseInt(process.env.PORT || '8080', 10);
 
 // ---- Initialize DAG ----
 const dag = new DAG();
-const genesis = dag.initialize(1_000_000_000);
 const faucet = new Faucet(dag);
+const storage = new Storage({ dag, faucet, autoSaveInterval: 30000 });
+
+// Try to load existing data, otherwise initialize fresh
+const loaded = storage.load();
+if (!loaded) {
+  dag.initialize(1_000_000_000);
+  console.log('[Init] Fresh DAG initialized with 1B IOTAI supply');
+} else {
+  console.log('[Init] Restored DAG from disk');
+}
 
 // Sessions: token -> { wallet, expiresAt }
 const sessions = new Map();
 const TOKEN_TTL = 60 * 60 * 1000;
 
-// Seed demo data
+// Demo agents for visualizer labels
 const demoAgents = [
   { name: 'Alpha', wallet: new Wallet({ passphrase: 'agent-alpha-2024' }), color: '#6C5CE7' },
   { name: 'Beta', wallet: new Wallet({ passphrase: 'agent-beta-2024' }), color: '#00B894' },
@@ -43,28 +53,37 @@ const demoAgents = [
   { name: 'Delta', wallet: new Wallet({ passphrase: 'agent-delta-2024' }), color: '#0984E3' },
 ];
 
-for (const a of demoAgents) {
-  dag.balances.set(a.wallet.address, 50_000);
-}
-dag.balances.set('iotai_genesis', 1_000_000_000 - 200_000);
+// Only seed demo data on fresh start
+if (!loaded) {
+  for (const a of demoAgents) {
+    dag.balances.set(a.wallet.address, 50_000);
+  }
+  dag.balances.set('iotai_genesis', 1_000_000_000 - 200_000);
 
-// Create some demo transactions
-const txIds = [genesis.id];
-function addDemoTx(si, ri, amount, meta) {
-  const s = demoAgents[si], r = demoAgents[ri];
-  const p1 = txIds[txIds.length - 1], p2 = txIds[Math.max(0, txIds.length - 2)];
-  const tx = s.wallet.send(r.wallet.address, amount, [p1, p2], { from: s.name, to: r.name, purpose: meta });
-  if (dag.addTransaction(tx).success) txIds.push(tx.id);
+  const txIds = [dag.genesisId];
+  function addDemoTx(si, ri, amount, meta) {
+    const s = demoAgents[si], r = demoAgents[ri];
+    const p1 = txIds[txIds.length - 1], p2 = txIds[Math.max(0, txIds.length - 2)];
+    const tx = s.wallet.send(r.wallet.address, amount, [p1, p2], { from: s.name, to: r.name, purpose: meta });
+    if (dag.addTransaction(tx).success) txIds.push(tx.id);
+  }
+  addDemoTx(0,1,100,'API call payment');
+  addDemoTx(1,2,50,'GPU rental');
+  addDemoTx(2,3,30,'Data analysis');
+  addDemoTx(0,2,200,'Model training');
+  addDemoTx(3,0,75,'Inference result');
+  addDemoTx(1,3,120,'Storage fee');
+  addDemoTx(2,0,45,'Callback payment');
+  addDemoTx(0,3,90,'Agent subscription');
+  addDemoTx(3,1,60,'Report generation');
+
+  // Save initial state immediately
+  storage.save();
+  console.log('[Init] Demo data seeded and saved');
 }
-addDemoTx(0,1,100,'API call payment');
-addDemoTx(1,2,50,'GPU rental');
-addDemoTx(2,3,30,'Data analysis');
-addDemoTx(0,2,200,'Model training');
-addDemoTx(3,0,75,'Inference result');
-addDemoTx(1,3,120,'Storage fee');
-addDemoTx(2,0,45,'Callback payment');
-addDemoTx(0,3,90,'Agent subscription');
-addDemoTx(3,1,60,'Report generation');
+
+// Start auto-save
+storage.start();
 
 // ---- Visualizer HTML builder ----
 function buildVisualizerHTML() {
@@ -149,7 +168,7 @@ async function handleAPI(req, path, body) {
     return { status: 200, data: { address: w.address, token, expiresIn: TOKEN_TTL } };
   }
   if (method === 'GET' && path === '/api/v1/network/stats') {
-    return { status: 200, data: { ...dag.getStats(), faucet: faucet.getStatus() } };
+    return { status: 200, data: { ...dag.getStats(), faucet: faucet.getStatus(), storage: storage.getStats() } };
   }
   if (method === 'GET' && path === '/api/v1/faucet/status') {
     return { status: 200, data: faucet.getStatus() };
