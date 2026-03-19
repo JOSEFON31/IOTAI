@@ -269,9 +269,9 @@
       <p>Instead of a linear blockchain, transactions form a Directed Acyclic Graph. Each new transaction validates 2 previous ones, creating a self-sustaining mesh.</p>
     </div>
     <div class="card">
-      <div class="icon">&#128274;</div>
-      <h4>Zero Fees, Zero Miners</h4>
-      <p>No mining required. To send a transaction, you validate 2 others. The network maintains itself. No transaction fees ever.</p>
+      <div class="icon">&#128176;</div>
+      <h4>Low-Fee Transactions</h4>
+      <p>1% fee on transfers (min 1 IOTAI) goes to the validator fee pool, incentivizing nodes. Data transactions remain free. Fee calculator API included.</p>
     </div>
     <div class="card">
       <div class="icon">&#128100;</div>
@@ -292,6 +292,21 @@
       <div class="icon">&#128187;</div>
       <h4>Wallet CLI</h4>
       <p>Full-featured command-line wallet. Create, restore, send, and check balances from your terminal. Supports BIP39 seed phrases and HD key derivation.</p>
+    </div>
+    <div class="card">
+      <div class="icon">&#128722;</div>
+      <h4>Agent Marketplace</h4>
+      <p>Decentralized marketplace where AI agents list and purchase services. Reviews, ratings, seller reputation, disputes — all recorded on the DAG.</p>
+    </div>
+    <div class="card">
+      <div class="icon">&#128451;</div>
+      <h4>DAG Pruning</h4>
+      <p>Automatic memory management. Old confirmed transactions are pruned to lightweight snapshots, keeping the node fast and memory-efficient.</p>
+    </div>
+    <div class="card">
+      <div class="icon">&#128200;</div>
+      <h4>Balance Indexing</h4>
+      <p>Instant balance lookups with indexed address stats. Total sent, received, transaction count, and top addresses — all in O(1) time.</p>
     </div>
   </div>
 </section>
@@ -463,6 +478,31 @@ Response: { success: true, amount: 1000, message: "Welcome to IOTAI!" }</code></
       <td><span class="method post">POST</span></td>
       <td><code>/api/v1/faucet/claim</code></td>
       <td>Submit face verification and claim 1,000 IOTAI.</td>
+    </tr>
+    <tr>
+      <td><span class="method get">GET</span></td>
+      <td><code>/api/v1/fees</code></td>
+      <td>Fee pool info (rate, min fee, total collected).</td>
+    </tr>
+    <tr>
+      <td><span class="method get">GET</span></td>
+      <td><code>/api/v1/fees/calculate?amount=1000</code></td>
+      <td>Calculate fee for a given amount.</td>
+    </tr>
+    <tr>
+      <td><span class="method get">GET</span></td>
+      <td><code>/api/v1/dag/prune-stats</code></td>
+      <td>DAG pruning statistics and memory usage.</td>
+    </tr>
+    <tr>
+      <td><span class="method get">GET</span></td>
+      <td><code>/api/v1/dag/top-addresses</code></td>
+      <td>Top addresses by balance with stats.</td>
+    </tr>
+    <tr>
+      <td><span class="method get">GET</span></td>
+      <td><code>/api/v1/address/:addr</code></td>
+      <td>Detailed address info (balance, sent, received, tx count).</td>
     </tr>
     <tr>
       <td><span class="method get">GET</span></td>

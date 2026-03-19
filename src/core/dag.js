@@ -12,7 +12,7 @@
  * The DAG is stored in memory and synced across all devices in the P2P network.
  */
 
-import { GENESIS_ID, createGenesis, verifyTransaction } from './transaction.js';
+import { GENESIS_ID, createGenesis, verifyTransaction, FEE_POOL_ADDRESS } from './transaction.js';
 
 export class DAG {
   constructor() {
@@ -32,6 +32,28 @@ export class DAG {
     this.usedNonces = new Set();
 
     this.genesisId = null;
+
+    // ---- Balance Index (fast lookups) ----
+    /** @type {Map<string, string[]>} - address -> list of tx IDs involving this address */
+    this.addressIndex = new Map();
+
+    /** @type {Map<string, number>} - address -> total sent */
+    this.totalSent = new Map();
+
+    /** @type {Map<string, number>} - address -> total received */
+    this.totalReceived = new Map();
+
+    /** @type {Map<string, number>} - address -> transaction count */
+    this.txCount = new Map();
+
+    // ---- Fee tracking ----
+    this.totalFeesCollected = 0;
+
+    // ---- Pruning state ----
+    /** @type {Map<string, object>} - pruned tx snapshots (id -> summary) */
+    this.prunedSnapshots = new Map();
+    this.lastPruneTime = 0;
+    this.pruneThreshold = 10000; // prune when tx count exceeds this
   }
 
   /**
@@ -83,13 +105,14 @@ export class DAG {
       }
     }
 
-    // Verify sender has sufficient balance for transfers
+    // Verify sender has sufficient balance for transfers (amount + fee)
     if (tx.type === 'transfer') {
       const senderBalance = this.balances.get(tx.from) || 0;
-      if (senderBalance < tx.amount) {
+      const totalCost = tx.amount + (tx.fee || 0);
+      if (senderBalance < totalCost) {
         return {
           success: false,
-          error: `Insufficient balance: has ${senderBalance}, needs ${tx.amount}`,
+          error: `Insufficient balance: has ${senderBalance}, needs ${totalCost} (${tx.amount} + ${tx.fee || 0} fee)`,
         };
       }
     }
@@ -115,16 +138,39 @@ export class DAG {
     // New transaction starts as a tip
     this.tips.add(tx.id);
 
-    // Update balances for transfers
+    // Update balances for transfers (amount + fee)
     if (tx.type === 'transfer') {
+      const fee = tx.fee || 0;
       const senderBalance = this.balances.get(tx.from) || 0;
       const recipientBalance = this.balances.get(tx.to) || 0;
-      this.balances.set(tx.from, senderBalance - tx.amount);
+
+      this.balances.set(tx.from, senderBalance - tx.amount - fee);
       this.balances.set(tx.to, recipientBalance + tx.amount);
+
+      // Fee goes to the fee pool
+      if (fee > 0) {
+        const poolBalance = this.balances.get(FEE_POOL_ADDRESS) || 0;
+        this.balances.set(FEE_POOL_ADDRESS, poolBalance + fee);
+        this.totalFeesCollected += fee;
+      }
+
+      // Update balance index
+      this._updateBalanceIndex(tx.from, tx.id, tx.amount + fee, 0);
+      this._updateBalanceIndex(tx.to, tx.id, 0, tx.amount);
+    }
+
+    // Index data transactions too
+    if (tx.type === 'data') {
+      this._updateBalanceIndex(tx.from, tx.id, 0, 0);
     }
 
     // Update cumulative weights
     this._updateCumulativeWeights(tx.id);
+
+    // Auto-prune if threshold exceeded
+    if (this.transactions.size > this.pruneThreshold) {
+      this.prune();
+    }
 
     return { success: true };
   }
@@ -196,6 +242,9 @@ export class DAG {
       tipCount: this.tips.size,
       uniqueAddresses: this.balances.size,
       usedNonces: this.usedNonces.size,
+      totalFeesCollected: this.totalFeesCollected,
+      feePoolBalance: this.balances.get(FEE_POOL_ADDRESS) || 0,
+      prunedTransactions: this.prunedSnapshots.size,
     };
   }
 
@@ -327,19 +376,193 @@ export class DAG {
 
       if (tx.nonce) this.usedNonces.add(tx.nonce);
 
-      // Update balances for transfers
+      // Update balances for transfers (with fee support)
       if (tx.type === 'transfer') {
+        const fee = tx.fee || 0;
         const senderBalance = this.balances.get(tx.from) || 0;
         const recipientBalance = this.balances.get(tx.to) || 0;
-        this.balances.set(tx.from, senderBalance - tx.amount);
+        this.balances.set(tx.from, senderBalance - tx.amount - fee);
         this.balances.set(tx.to, recipientBalance + tx.amount);
+
+        if (fee > 0) {
+          const poolBalance = this.balances.get(FEE_POOL_ADDRESS) || 0;
+          this.balances.set(FEE_POOL_ADDRESS, poolBalance + fee);
+          this.totalFeesCollected += fee;
+        }
+
+        this._updateBalanceIndex(tx.from, tx.id, tx.amount + fee, 0);
+        this._updateBalanceIndex(tx.to, tx.id, 0, tx.amount);
+      }
+
+      if (tx.type === 'data') {
+        this._updateBalanceIndex(tx.from, tx.id, 0, 0);
       }
     }
   }
 
   // ============================================================
+  // BALANCE INDEX
+  // ============================================================
+
+  /**
+   * Get detailed balance info for an address (fast indexed lookup)
+   * @param {string} address
+   * @returns {object}
+   */
+  getAddressInfo(address) {
+    return {
+      address,
+      balance: this.balances.get(address) || 0,
+      totalSent: this.totalSent.get(address) || 0,
+      totalReceived: this.totalReceived.get(address) || 0,
+      transactionCount: this.txCount.get(address) || 0,
+      transactionIds: this.addressIndex.get(address) || [],
+    };
+  }
+
+  /**
+   * Get top addresses by balance
+   * @param {number} [limit=20]
+   * @returns {Array<{address: string, balance: number}>}
+   */
+  getTopAddresses(limit = 20) {
+    return [...this.balances.entries()]
+      .filter(([addr]) => addr !== 'iotai_genesis' && addr !== FEE_POOL_ADDRESS)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([address, balance]) => ({
+        address,
+        balance,
+        sent: this.totalSent.get(address) || 0,
+        received: this.totalReceived.get(address) || 0,
+        txCount: this.txCount.get(address) || 0,
+      }));
+  }
+
+  /**
+   * Get fee pool info
+   */
+  getFeeInfo() {
+    return {
+      feePoolAddress: FEE_POOL_ADDRESS,
+      feePoolBalance: this.balances.get(FEE_POOL_ADDRESS) || 0,
+      totalFeesCollected: this.totalFeesCollected,
+      feeRate: '1%',
+      minFee: 1,
+    };
+  }
+
+  // ============================================================
+  // DAG PRUNING
+  // ============================================================
+
+  /**
+   * Prune old, deeply confirmed transactions to save memory.
+   * Keeps: tips, recent transactions, and transactions with low cumulative weight.
+   * Pruned transactions are replaced with lightweight snapshots.
+   * @param {object} [options]
+   * @param {number} [options.maxAge] - prune txs older than this (ms), default 1 hour
+   * @param {number} [options.minWeight] - only prune txs with cumWeight > this, default 10
+   * @param {boolean} [options.keepBalanceHistory] - keep balance-affecting tx summaries
+   * @returns {{ pruned: number, remaining: number }}
+   */
+  prune(options = {}) {
+    const {
+      maxAge = 60 * 60 * 1000, // 1 hour
+      minWeight = 10,
+      keepBalanceHistory = true,
+    } = options;
+
+    const now = Date.now();
+    const cutoff = now - maxAge;
+    let pruned = 0;
+
+    // Never prune: genesis, tips, recent transactions, or low-weight transactions
+    const protectedIds = new Set([this.genesisId, ...this.tips]);
+
+    for (const [txId, tx] of this.transactions.entries()) {
+      if (protectedIds.has(txId)) continue;
+      if (tx.type === 'genesis') continue;
+      if (tx.timestamp > cutoff) continue; // too recent
+      if (tx.cumulativeWeight < minWeight) continue; // not confirmed enough
+
+      // Check if any children are tips (don't prune parents of tips)
+      const txChildren = this.children.get(txId);
+      if (txChildren) {
+        let hasUnprunedChild = false;
+        for (const childId of txChildren) {
+          if (this.tips.has(childId) || (this.transactions.has(childId) && this.transactions.get(childId).timestamp > cutoff)) {
+            hasUnprunedChild = true;
+            break;
+          }
+        }
+        if (hasUnprunedChild) continue;
+      }
+
+      // Save lightweight snapshot before pruning
+      if (keepBalanceHistory) {
+        this.prunedSnapshots.set(txId, {
+          id: txId,
+          type: tx.type,
+          from: tx.from,
+          to: tx.to,
+          amount: tx.amount,
+          fee: tx.fee || 0,
+          timestamp: tx.timestamp,
+          prunedAt: now,
+        });
+      }
+
+      // Remove the full transaction
+      this.transactions.delete(txId);
+      // Keep children map entry for DAG structure integrity
+      pruned++;
+    }
+
+    this.lastPruneTime = now;
+
+    if (pruned > 0) {
+      console.log(`[DAG] Pruned ${pruned} old transactions. Remaining: ${this.transactions.size}`);
+    }
+
+    return { pruned, remaining: this.transactions.size };
+  }
+
+  /**
+   * Get pruning statistics
+   */
+  getPruneStats() {
+    return {
+      totalActive: this.transactions.size,
+      totalPruned: this.prunedSnapshots.size,
+      lastPruneTime: this.lastPruneTime,
+      pruneThreshold: this.pruneThreshold,
+      memoryEstimate: `${Math.round((this.transactions.size * 512) / 1024)} KB`,
+    };
+  }
+
+  // ============================================================
   // PRIVATE METHODS
   // ============================================================
+
+  /**
+   * Update balance index for an address
+   * @param {string} address
+   * @param {string} txId
+   * @param {number} sent
+   * @param {number} received
+   */
+  _updateBalanceIndex(address, txId, sent, received) {
+    // Address -> tx ID index
+    const txIds = this.addressIndex.get(address) || [];
+    txIds.push(txId);
+    this.addressIndex.set(address, txIds);
+
+    // Aggregates
+    this.totalSent.set(address, (this.totalSent.get(address) || 0) + sent);
+    this.totalReceived.set(address, (this.totalReceived.get(address) || 0) + received);
+    this.txCount.set(address, (this.txCount.get(address) || 0) + 1);
+  }
 
   /**
    * Update cumulative weights walking back from a new transaction to genesis

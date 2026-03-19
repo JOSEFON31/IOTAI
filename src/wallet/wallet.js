@@ -124,7 +124,7 @@ export class Wallet {
    * @param {object} [metadata] - optional data for AI agents
    * @returns {import('../core/transaction.js').Transaction}
    */
-  send(to, amount, parents, metadata = null) {
+  send(to, amount, parents, metadata = null, fee = null) {
     return createTransaction({
       senderSecretKey: this.secretKey,
       senderPublicKey: this.publicKey,
@@ -132,6 +132,7 @@ export class Wallet {
       amount,
       parents,
       metadata,
+      fee,
     });
   }
 

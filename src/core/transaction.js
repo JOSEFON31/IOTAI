@@ -87,6 +87,22 @@ export function createGenesis(initialSupply) {
  * @param {object} [params.metadata] - optional data payload for AI agents
  * @returns {Transaction}
  */
+/** Default fee rate: 1% of transfer amount (min 1 IOTAI) */
+export const DEFAULT_FEE_RATE = 0.01;
+export const MIN_FEE = 1;
+export const FEE_POOL_ADDRESS = 'iotai_fee_pool';
+
+/**
+ * Calculate the fee for a given amount
+ * @param {number} amount
+ * @param {number} [feeRate] - override fee rate (0-1)
+ * @returns {number}
+ */
+export function calculateFee(amount, feeRate = DEFAULT_FEE_RATE) {
+  if (amount <= 0) return 0;
+  return Math.max(MIN_FEE, Math.round(amount * feeRate));
+}
+
 export function createTransaction({
   senderSecretKey,
   senderPublicKey,
@@ -94,6 +110,7 @@ export function createTransaction({
   amount,
   parents,
   metadata = null,
+  fee = null, // auto-calculated if null
 }) {
   if (parents.length !== 2) {
     throw new Error('Transaction must reference exactly 2 parent transactions');
@@ -106,6 +123,7 @@ export function createTransaction({
   const from = publicKeyToAddress(senderPublicKey);
   const nonce = generateNonce();
   const timestamp = Date.now();
+  const txFee = fee !== null ? fee : calculateFee(amount);
 
   // Fields that get hashed (deterministic)
   const hashableFields = {
@@ -113,6 +131,7 @@ export function createTransaction({
     from,
     to,
     amount,
+    fee: txFee,
     timestamp,
     nonce,
     parents: parents.sort(), // canonical order
@@ -133,6 +152,7 @@ export function createTransaction({
     from,
     to,
     amount,
+    fee: txFee,
     timestamp,
     nonce,
     parents: parents.sort(),
@@ -237,6 +257,11 @@ export function verifyTransaction(tx) {
     nonce: tx.nonce,
     parents: tx.parents,
   };
+
+  // Include fee in hash for transfers that have it
+  if (tx.type === 'transfer' && tx.fee !== undefined && tx.fee !== null) {
+    hashableFields.fee = tx.fee;
+  }
 
   if (tx.metadata) {
     hashableFields.metadata = tx.metadata;

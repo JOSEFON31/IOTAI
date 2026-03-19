@@ -14,6 +14,7 @@ import { DAG } from './core/dag.js';
 import { Wallet } from './wallet/wallet.js';
 import { Faucet } from './core/faucet.js';
 import { Storage } from './core/storage.js';
+import { calculateFee, FEE_POOL_ADDRESS } from './core/transaction.js';
 import {
   hash,
   generateNonce,
@@ -88,9 +89,9 @@ async function initialize() {
   marketplace = new Marketplace({ dag });
 
   // Seed demo marketplace listings if empty
-  if (marketplace.listings.size === 0 && wallets.length > 0) {
+  if (marketplace.listings.size === 0 && demoAgents.length > 0) {
     const tips = dag.selectTips();
-    marketplace.seedDemoData(wallets[0], tips);
+    marketplace.seedDemoData(demoAgents[0].wallet, tips);
   }
 }
 
@@ -253,7 +254,7 @@ async function handleAPI(req, path, body) {
     return { status: 200, data: { address: w.address, token, expiresIn: TOKEN_TTL, balance: dag.getBalance(w.address) } };
   }
   if (method === 'GET' && path === '/api/v1/network/stats') {
-    return { status: 200, data: { ...dag.getStats(), faucet: faucet.getStatus(), storage: storage.getStats() } };
+    return { status: 200, data: { ...dag.getStats(), fees: dag.getFeeInfo(), pruning: dag.getPruneStats(), faucet: faucet.getStatus(), storage: storage.getStats() } };
   }
   if (method === 'GET' && path === '/api/v1/faucet/status') {
     return { status: 200, data: faucet.getStatus() };
@@ -269,6 +270,28 @@ async function handleAPI(req, path, body) {
     const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
     const result = await faucet.claimTokens({ ...body, livenessPass: body.livenessPass ?? false, ip });
     return { status: result.success ? 200 : 400, data: result };
+  }
+
+  // ---- Fee & Pruning Public Routes ----
+  if (method === 'GET' && path === '/api/v1/fees') {
+    return { status: 200, data: dag.getFeeInfo() };
+  }
+  if (method === 'GET' && path === '/api/v1/fees/calculate') {
+    const url = new URL(req.url, `http://localhost:${PORT}`);
+    const amount = parseFloat(url.searchParams.get('amount') || '0');
+    return { status: 200, data: { amount, fee: calculateFee(amount), total: amount + calculateFee(amount) } };
+  }
+  if (method === 'GET' && path === '/api/v1/dag/prune-stats') {
+    return { status: 200, data: dag.getPruneStats() };
+  }
+  if (method === 'GET' && path === '/api/v1/dag/top-addresses') {
+    const url = new URL(req.url, `http://localhost:${PORT}`);
+    const limit = parseInt(url.searchParams.get('limit') || '20', 10);
+    return { status: 200, data: dag.getTopAddresses(limit) };
+  }
+  if (method === 'GET' && path.startsWith('/api/v1/address/')) {
+    const addr = path.split('/api/v1/address/')[1];
+    return { status: 200, data: dag.getAddressInfo(addr) };
   }
 
   // ---- Marketplace Public Routes ----
@@ -316,7 +339,7 @@ async function handleAPI(req, path, body) {
     if (!v.valid) return { status: 400, data: { error: v.error } };
     const r = dag.addTransaction(tx);
     if (!r.success) return { status: 400, data: { error: r.error } };
-    return { status: 200, data: { txId: tx.id, from: tx.from, to: tx.to, amount: tx.amount, status: 'confirmed' } };
+    return { status: 200, data: { txId: tx.id, from: tx.from, to: tx.to, amount: tx.amount, fee: tx.fee || 0, status: 'confirmed' } };
   }
   if (method === 'POST' && path === '/api/v1/data') {
     if (!body?.metadata) return { status: 400, data: { error: 'Required: metadata' } };
