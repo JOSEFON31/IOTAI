@@ -15,6 +15,8 @@
  */
 
 import { DAG } from './core/dag.js';
+import { Faucet } from './core/faucet.js';
+import { Storage } from './core/storage.js';
 import { IOTAINode } from './network/node.js';
 import { Validator } from './consensus/validator.js';
 import { AgentAPI } from './api/agent-api.js';
@@ -46,14 +48,23 @@ async function main() {
   // ---- Step 1: Initialize the DAG ----
   console.log('[1/4] Initializing DAG (Tangle)...');
   const dag = new DAG();
-  const genesis = dag.initialize(1_000_000_000); // 1 billion IOTAI
-  console.log(`  Genesis: ${genesis.id.substring(0, 16)}...`);
-  console.log(`  Supply: 1,000,000,000 IOTAI`);
+  const faucet = new Faucet(dag);
+  const storage = new Storage({ dag, faucet, autoSaveInterval: 30000 });
+
+  const loaded = await storage.load();
+  if (!loaded) {
+    dag.initialize(1_000_000_000);
+    console.log(`  Fresh DAG: 1,000,000,000 IOTAI`);
+  } else {
+    console.log(`  Restored: ${dag.transactions.size} txs`);
+  }
+  storage.start();
 
   // ---- Step 2: Start P2P Node ----
   console.log('[2/4] Starting P2P node...');
   const node = new IOTAINode({
     dag,
+    faucet,
     port: p2pPort,
     bootstrapPeers: peerAddr ? [peerAddr] : [],
   });
@@ -92,9 +103,15 @@ async function main() {
   console.log(`  GET  /api/v1/network/stats  - Network stats`);
   console.log('');
 
-  // Listen for new transactions
+  // Listen for new transactions and syncs
   node.on('transaction:received', (tx) => {
     console.log(`[TX] Received: ${tx.id?.substring(0, 12)}... | ${tx.from?.substring(0, 16)} -> ${tx.to?.substring(0, 16)} | ${tx.amount} IOTAI`);
+    storage.save(); // persist new tx
+  });
+
+  node.on('sync:complete', ({ peerId, imported }) => {
+    console.log(`[Sync] Got ${imported} txs from peer. Saving...`);
+    storage.save({ forceGithub: true }); // persist synced data
   });
 
   // Graceful shutdown
