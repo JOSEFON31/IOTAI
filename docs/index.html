@@ -204,6 +204,40 @@
       <div class="label">Tangle Architecture</div>
     </div>
   </div>
+
+  <!-- LIVE FAUCET STATS -->
+  <div style="max-width:700px;margin:48px auto 0;background:#1a1a3e;border:1px solid #2a2a5e;border-radius:16px;padding:32px;text-align:center">
+    <h3 style="color:#FDCB6E;font-size:20px;margin-bottom:24px">Token Distribution (Live)</h3>
+    <div style="display:flex;justify-content:center;gap:32px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:36px;font-weight:bold;color:#00B894" id="live-claimed">-</div>
+        <div style="font-size:13px;color:#888">Tokens Claimed</div>
+      </div>
+      <div>
+        <div style="font-size:36px;font-weight:bold;color:#E17055" id="live-remaining">-</div>
+        <div style="font-size:13px;color:#888">Tokens Available</div>
+      </div>
+      <div>
+        <div style="font-size:36px;font-weight:bold;color:#6C5CE7" id="live-people">-</div>
+        <div style="font-size:13px;color:#888">People Verified</div>
+      </div>
+      <div>
+        <div style="font-size:36px;font-weight:bold;color:#0984E3" id="live-spots">-</div>
+        <div style="font-size:13px;color:#888">Spots Left</div>
+      </div>
+    </div>
+    <!-- Progress bar -->
+    <div style="margin-top:24px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#888;margin-bottom:6px">
+        <span>Distributed</span>
+        <span id="live-pct">0%</span>
+      </div>
+      <div style="height:12px;background:#0a0a1a;border-radius:6px;overflow:hidden">
+        <div id="live-bar" style="height:100%;background:linear-gradient(90deg,#6C5CE7,#00B894);border-radius:6px;width:0%;transition:width 1s"></div>
+      </div>
+    </div>
+    <a href="/wallet.html" style="display:inline-block;margin-top:20px;background:#00B894;color:white;padding:12px 32px;border-radius:8px;font-weight:bold;font-size:15px;text-decoration:none">Claim Your 1,000 IOTAI</a>
+  </div>
 </div>
 
 <!-- ABOUT -->
@@ -504,5 +538,30 @@ node src/index.js --peer /ip4/192.168.1.100/tcp/4001/p2p/QmPeerId...</code></pre
   IOTAI &mdash; AI-Powered Distributed Cryptocurrency &mdash; Every device is the network.
 </footer>
 
+<script>
+async function loadLiveStats() {
+  try {
+    const res = await fetch('/api/v1/faucet/status');
+    const d = await res.json();
+    const claimed = (d.distributed || 0);
+    const remaining = (d.remaining || 0);
+    const people = (d.recipients || d.totalRecipients || 0);
+    const maxPeople = 600000;
+    const spots = maxPeople - people;
+    const pct = d.percentDistributed || 0;
+
+    document.getElementById('live-claimed').textContent = claimed.toLocaleString();
+    document.getElementById('live-remaining').textContent = remaining.toLocaleString();
+    document.getElementById('live-people').textContent = people.toLocaleString();
+    document.getElementById('live-spots').textContent = spots.toLocaleString();
+    document.getElementById('live-pct').textContent = pct + '%';
+    document.getElementById('live-bar').style.width = Math.max(pct, 0.5) + '%';
+  } catch (e) {
+    console.error('Failed to load faucet stats:', e);
+  }
+}
+loadLiveStats();
+setInterval(loadLiveStats, 10000);
+</script>
 </body>
 </html>
