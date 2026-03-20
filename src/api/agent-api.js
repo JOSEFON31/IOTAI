@@ -231,11 +231,19 @@ export class AgentAPI {
    * Generate a new ephemeral token for an existing wallet
    */
   _createToken(body) {
-    if (!body?.passphrase) {
-      return { status: 400, data: { error: 'Passphrase required' } };
+    let wallet;
+    if (body?.mnemonic) {
+      try {
+        wallet = Wallet.fromMnemonic(body.mnemonic);
+      } catch (e) {
+        return { status: 400, data: { error: e.message } };
+      }
+    } else if (body?.passphrase) {
+      wallet = new Wallet({ passphrase: body.passphrase });
+    } else {
+      return { status: 400, data: { error: 'mnemonic or passphrase required' } };
     }
 
-    const wallet = new Wallet({ passphrase: body.passphrase });
     const token = this._generateToken();
 
     this.sessions.set(token, {
@@ -249,6 +257,7 @@ export class AgentAPI {
         address: wallet.address,
         token,
         expiresIn: this.tokenTTL,
+        balance: this.dag.getBalance(wallet.address),
       },
     };
   }
