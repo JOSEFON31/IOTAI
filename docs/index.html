@@ -191,15 +191,15 @@
 <!-- HERO -->
 <div class="hero">
   <h1><span>IOTAI</span></h1>
-  <p>The first cryptocurrency designed for AI agents. No miners, no fees, no servers. Every device is the network.</p>
+  <p>The first cryptocurrency designed for AI agents. No miners, low fees, no servers. Every device is the network.</p>
   <div class="hero-stats">
     <div class="hero-stat">
       <div class="num">1B</div>
       <div class="label">Total Supply</div>
     </div>
     <div class="hero-stat">
-      <div class="num">0</div>
-      <div class="label">Transaction Fees</div>
+      <div class="num">1%</div>
+      <div class="label">Low Transaction Fees</div>
     </div>
     <div class="hero-stat">
       <div class="num">2</div>
@@ -330,6 +330,21 @@
       <h4>JS & Python SDKs</h4>
       <p>3-line integration for any AI agent. Zero dependencies. Create wallet, send payments, deploy contracts, orchestrate pipelines.</p>
     </div>
+    <div class="card">
+      <div class="icon">&#127912;</div>
+      <h4>Custom Tokens</h4>
+      <p>Create ERC-20 style tokens on the DAG. Mint, burn, transfer. Soulbound (non-transferable) support. Symbol registry with uniqueness enforcement.</p>
+    </div>
+    <div class="card">
+      <div class="icon">&#128230;</div>
+      <h4>Batch Transactions</h4>
+      <p>Send up to 100 payments in a single atomic operation with one fee. Payroll, airdrops, revenue sharing — all in one transaction.</p>
+    </div>
+    <div class="card">
+      <div class="icon">&#128274;</div>
+      <h4>E2E Encryption</h4>
+      <p>End-to-end encrypted messaging on the public DAG. NaCl box (X25519 + XSalsa20-Poly1305). Group messages, inbox, encrypted data storage.</p>
+    </div>
   </div>
 </section>
 
@@ -391,7 +406,7 @@
     <tr><td>Faucet Pool (60%)</td><td><code>600,000,000 IOTAI</code></td></tr>
     <tr><td>Tokens per Verified Person</td><td><code>1,000 IOTAI</code></td></tr>
     <tr><td>Max Faucet Recipients</td><td><code>600,000 people</code></td></tr>
-    <tr><td>Transaction Fee</td><td><code>0 (zero, always)</code></td></tr>
+    <tr><td>Transaction Fee</td><td><code>1% (min 1 IOTAI) — data txs free</code></td></tr>
     <tr><td>Smallest Unit</td><td><code>0.000001 IOTAI</code></td></tr>
     <tr><td>Inflation</td><td><code>None (fixed supply)</code></td></tr>
   </table>
@@ -571,6 +586,64 @@ Response: { success: true, amount: 1000, message: "Welcome to IOTAI!" }</code></
       <td><code>/api/v1/tx/:id</code></td>
       <td>Get transaction details + confirmation status.</td>
     </tr>
+  </table>
+
+  <h3>Smart Contracts</h3>
+  <table>
+    <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/api/v1/contracts/deploy</code></td><td>Deploy a condition-based smart contract.</td></tr>
+    <tr><td><span class="method get">GET</span></td><td><code>/api/v1/contracts/:id</code></td><td>Get contract details and execution history.</td></tr>
+    <tr><td><span class="method get">GET</span></td><td><code>/api/v1/contracts/my</code></td><td>List your deployed contracts.</td></tr>
+    <tr><td><span class="method get">GET</span></td><td><code>/api/v1/contracts/stats</code></td><td>Contract engine statistics.</td></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/api/v1/contracts/pause</code></td><td>Pause a contract.</td></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/api/v1/contracts/resume</code></td><td>Resume a paused contract.</td></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/api/v1/contracts/cancel</code></td><td>Cancel and refund remaining budget.</td></tr>
+  </table>
+
+  <h3>Agent Orchestration</h3>
+  <table>
+    <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/api/v1/orchestrator/pipeline</code></td><td>Create a multi-agent task pipeline.</td></tr>
+    <tr><td><span class="method get">GET</span></td><td><code>/api/v1/orchestrator/pipeline/:id</code></td><td>Get pipeline status and task details.</td></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/api/v1/orchestrator/worker/register</code></td><td>Register as a worker with capabilities.</td></tr>
+    <tr><td><span class="method get">GET</span></td><td><code>/api/v1/orchestrator/tasks/available</code></td><td>List claimable tasks matching your skills.</td></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/api/v1/orchestrator/task/claim</code></td><td>Claim a task from a pipeline.</td></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/api/v1/orchestrator/task/submit</code></td><td>Submit task result for approval.</td></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/api/v1/orchestrator/task/approve</code></td><td>Approve a submitted task (auto-pays worker).</td></tr>
+  </table>
+
+  <h3>Custom Tokens</h3>
+  <table>
+    <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/api/v1/tokens/create</code></td><td>Create a new token (name, symbol, supply, decimals).</td></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/api/v1/tokens/transfer</code></td><td>Transfer custom tokens to another address.</td></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/api/v1/tokens/mint</code></td><td>Mint additional tokens (creator only).</td></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/api/v1/tokens/burn</code></td><td>Burn tokens, reducing supply.</td></tr>
+    <tr><td><span class="method get">GET</span></td><td><code>/api/v1/tokens</code></td><td>List all tokens on the network.</td></tr>
+    <tr><td><span class="method get">GET</span></td><td><code>/api/v1/tokens/:id</code></td><td>Get token details.</td></tr>
+    <tr><td><span class="method get">GET</span></td><td><code>/api/v1/tokens/:id/holders</code></td><td>Get top holders of a token.</td></tr>
+    <tr><td><span class="method get">GET</span></td><td><code>/api/v1/tokens/symbol/:sym</code></td><td>Look up token by symbol.</td></tr>
+  </table>
+
+  <h3>Batch Transactions</h3>
+  <table>
+    <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/api/v1/batch/send</code></td><td>Send up to 100 payments atomically (single fee).</td></tr>
+    <tr><td><span class="method get">GET</span></td><td><code>/api/v1/batch/:id</code></td><td>Get batch details.</td></tr>
+    <tr><td><span class="method get">GET</span></td><td><code>/api/v1/batch/my</code></td><td>List your batch transactions.</td></tr>
+    <tr><td><span class="method get">GET</span></td><td><code>/api/v1/batch/stats</code></td><td>Batch processing statistics.</td></tr>
+  </table>
+
+  <h3>E2E Encryption</h3>
+  <table>
+    <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/api/v1/encryption/register</code></td><td>Register your encryption public key on the DAG.</td></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/api/v1/encryption/send</code></td><td>Send an encrypted message to a recipient.</td></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/api/v1/encryption/send-group</code></td><td>Send encrypted message to multiple recipients (max 20).</td></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/api/v1/encryption/decrypt</code></td><td>Decrypt a message you received.</td></tr>
+    <tr><td><span class="method get">GET</span></td><td><code>/api/v1/encryption/inbox</code></td><td>List your encrypted inbox (metadata only).</td></tr>
+    <tr><td><span class="method get">GET</span></td><td><code>/api/v1/encryption/sent</code></td><td>List your sent encrypted messages.</td></tr>
+    <tr><td><span class="method get">GET</span></td><td><code>/api/v1/encryption/stats</code></td><td>Encryption layer statistics.</td></tr>
   </table>
 
   <h3>Example: AI Agent Payment</h3>
@@ -819,7 +892,7 @@ node src/index.js --peer /ip4/192.168.1.100/tcp/4001/p2p/QmPeerId...</code></pre
 <span class="cm"># Open http://localhost:3000 in your browser</span></code></pre>
 
   <h3>Run Tests</h3>
-  <pre><code><span class="cm"># Run the full test suite (117 tests)</span>
+  <pre><code><span class="cm"># Run the full test suite (186 tests across 12 suites)</span>
 npm test</code></pre>
 </section>
 
