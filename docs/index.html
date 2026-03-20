@@ -858,8 +858,14 @@ $ npm run wallet -- send iotai_recipient_address 500</code></pre>
 
   <h3>Configuration</h3>
   <p style="color:var(--muted)">Set the <code>IOTAI_API</code> environment variable to point to your node. Default: <code>http://localhost:8080</code></p>
-  <pre><code><span class="cm"># Connect to a remote node</span>
-IOTAI_API=https://your-node.onrender.com npm run wallet balance</code></pre>
+  <pre><code><span class="cm"># Connect to the IOTAI main node on Render</span>
+IOTAI_API=https://iotai.onrender.com npm run wallet balance
+
+<span class="cm"># Check balance on Render</span>
+IOTAI_API=https://iotai.onrender.com npm run wallet balance
+
+<span class="cm"># Send tokens via Render</span>
+IOTAI_API=https://iotai.onrender.com npm run wallet -- send iotai_address 100</code></pre>
 </section>
 
 <!-- RUN A NODE -->
@@ -867,7 +873,7 @@ IOTAI_API=https://your-node.onrender.com npm run wallet balance</code></pre>
   <h2>Run a Node</h2>
   <p>Every device strengthens the network. Here's how to join.</p>
 
-  <h3>Quick Start</h3>
+  <h3>Quick Start (Synced with Main Network)</h3>
   <pre><code><span class="cm"># Clone the repository</span>
 git clone https://github.com/JOSEFON31/IOTAI.git
 cd IOTAI
@@ -875,14 +881,23 @@ cd IOTAI
 <span class="cm"># Install dependencies</span>
 npm install
 
-<span class="cm"># Start your node</span>
-node src/index.js --api-port 8080
+<span class="cm"># Start your node synced with the main network</span>
+node src/index.js --api-port 8080 --sync-from https://iotai.onrender.com
 
 <span class="cm"># Start a second node (auto-discovers the first via mDNS)</span>
 node src/index.js --api-port 8081
 
 <span class="cm"># Or connect to a specific peer</span>
 node src/index.js --peer /ip4/192.168.1.100/tcp/4001/p2p/QmPeerId...</code></pre>
+
+  <h3>Sync Options</h3>
+  <table>
+    <tr><th>Flag</th><th>Description</th></tr>
+    <tr><td><code>--sync-from &lt;url&gt;</code></td><td>Sync transactions from a remote HTTP node (e.g. <code>https://iotai.onrender.com</code>). Downloads all transactions at startup and syncs every 60s.</td></tr>
+    <tr><td><code>--api-port &lt;port&gt;</code></td><td>Set the API port (default: 8080).</td></tr>
+    <tr><td><code>--port &lt;port&gt;</code></td><td>Set the P2P port (default: random).</td></tr>
+    <tr><td><code>--peer &lt;addr&gt;</code></td><td>Connect to a specific libp2p peer.</td></tr>
+  </table>
 
   <h3>Run the Demo (Offline)</h3>
   <pre><code>node src/demo.js</code></pre>
@@ -892,7 +907,7 @@ node src/index.js --peer /ip4/192.168.1.100/tcp/4001/p2p/QmPeerId...</code></pre
 <span class="cm"># Open http://localhost:3000 in your browser</span></code></pre>
 
   <h3>Run Tests</h3>
-  <pre><code><span class="cm"># Run the full test suite (186 tests across 12 suites)</span>
+  <pre><code><span class="cm"># Run the full test suite (199 tests across 12 suites)</span>
 npm test</code></pre>
 </section>
 
