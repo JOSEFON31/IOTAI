@@ -5,7 +5,7 @@
   <img src="https://img.shields.io/badge/crypto-Ed25519%20%2B%20BLAKE3-blue?style=flat-square" alt="Crypto"/>
   <img src="https://img.shields.io/badge/architecture-DAG%20(Tangle)-purple?style=flat-square" alt="DAG"/>
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License"/>
-  <img src="https://img.shields.io/badge/tests-12%20suites-orange?style=flat-square" alt="Tests"/>
+  <img src="https://img.shields.io/badge/tests-199%20passing-orange?style=flat-square" alt="Tests"/>
   <img src="https://img.shields.io/badge/docker-ready-2496ED?style=flat-square" alt="Docker"/>
 </p>
 
@@ -47,15 +47,31 @@ git clone https://github.com/JOSEFON31/IOTAI.git
 cd IOTAI
 npm install
 
-# Start the server
+# Start the server (standalone, cloud-ready)
 npm start
 # Server running on http://localhost:8080
 
-# Or start a P2P node
-npm run node
+# Or start a P2P node synced with the main network
+node src/index.js --api-port 8080 --sync-from https://iotai.onrender.com
 ```
 
-**That's it.** Your node is running. Open http://localhost:8080 to see the dashboard.
+**That's it.** Your node is running and synced. Open http://localhost:8080 to see the dashboard.
+
+### Wallet CLI
+
+```bash
+# Create a new wallet
+npm run wallet create
+
+# Check balance (pointing to the main network)
+IOTAI_API=https://iotai.onrender.com npm run wallet balance
+
+# Send tokens
+IOTAI_API=https://iotai.onrender.com npm run wallet -- send iotai_address 100
+
+# Restore wallet from seed phrase
+npm run wallet restore
+```
 
 ## For AI Agents (5 min integration)
 
@@ -385,6 +401,40 @@ Each transaction validates 2 previous transactions. No blocks. No mining. The mo
 | `POST` | `/api/v1/orchestrator/task/approve` | Approve task |
 | `POST` | `/api/v1/orchestrator/task/reject` | Reject task |
 
+### Custom Tokens
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/tokens/create` | Create token (name, symbol, supply) |
+| `POST` | `/api/v1/tokens/transfer` | Transfer tokens |
+| `POST` | `/api/v1/tokens/mint` | Mint more (creator only) |
+| `POST` | `/api/v1/tokens/burn` | Burn tokens |
+| `GET` | `/api/v1/tokens` | List all tokens |
+| `GET` | `/api/v1/tokens/:id` | Token details |
+| `GET` | `/api/v1/tokens/:id/holders` | Top holders |
+| `GET` | `/api/v1/tokens/symbol/:sym` | Lookup by symbol |
+
+### Batch Transactions
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/batch/send` | Send up to 100 payments atomically |
+| `GET` | `/api/v1/batch/:id` | Batch details |
+| `GET` | `/api/v1/batch/my` | My batches |
+| `GET` | `/api/v1/batch/stats` | Batch stats |
+
+### E2E Encryption
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/encryption/register` | Register encryption key |
+| `POST` | `/api/v1/encryption/send` | Send encrypted message |
+| `POST` | `/api/v1/encryption/send-group` | Group message (max 20) |
+| `POST` | `/api/v1/encryption/decrypt` | Decrypt a message |
+| `GET` | `/api/v1/encryption/inbox` | Encrypted inbox |
+| `GET` | `/api/v1/encryption/sent` | Sent messages |
+| `GET` | `/api/v1/encryption/stats` | Encryption stats |
+
 ## Tech Stack
 
 | Component | Technology |
@@ -408,7 +458,9 @@ src/
 │   ├── crypto.js           # Ed25519 + BLAKE3
 │   ├── faucet.js           # Proof-of-personhood distribution
 │   ├── mnemonic.js         # BIP39 seed generation
-│   └── storage.js          # Disk + GitHub persistence
+│   ├── storage.js          # Disk + GitHub persistence
+│   ├── batch.js            # Batch transactions (up to 100)
+│   └── encryption.js       # E2E encryption (NaCl box)
 ├── wallet/
 │   ├── wallet.js           # HD wallet management
 │   └── cli.js              # CLI interface
@@ -423,6 +475,8 @@ src/
 │   └── engine.js           # Smart contracts engine
 ├── orchestrator/
 │   └── orchestrator.js     # Multi-agent task pipelines
+├── tokens/
+│   └── token-manager.js    # Custom tokens (ERC-20 style)
 ├── api/
 │   ├── agent-api.js        # REST API for agents
 │   ├── websocket.js        # Real-time WebSocket API
@@ -435,7 +489,7 @@ sdk/
 └── python/                 # Python SDK (zero deps)
 
 docs/                       # Web UI (index, marketplace, explorer, dashboard)
-tests/                      # 12 test suites
+tests/                      # 15 test suites, 199 tests
 ```
 
 ## Running Tests
@@ -457,6 +511,9 @@ npm test
   Smart Contracts .... 14 passed
   Orchestrator ....... 13 passed
   Escrow ............. 10 passed
+  Custom Tokens ..... 13 passed
+  Batch .............. 9 passed
+  Encryption ........ 10 passed
 ```
 
 ## Tokenomics
@@ -493,27 +550,36 @@ docker run -p 8080:8080 iotai
 ### Multi-Node Network
 
 ```bash
-# Node 1
-PORT=8080 npm start
+# Node 1 (synced with main network)
+node src/index.js --api-port 8080 --sync-from https://iotai.onrender.com
 
-# Node 2
-PORT=8081 npm start
+# Node 2 (discovers Node 1 via mDNS)
+node src/index.js --api-port 8081
 
-# Connect them
+# Or connect cloud nodes via HTTP
 curl -X POST http://localhost:8081/api/v1/network/peers/add \
   -d '{"url": "http://localhost:8080"}'
 
-# They'll sync every 30 seconds automatically
+# They'll sync every 30-60 seconds automatically
 ```
+
+### Node Options
+
+| Flag | Description |
+|------|-------------|
+| `--sync-from <url>` | Sync with a remote HTTP node (e.g. `https://iotai.onrender.com`). Downloads all transactions at startup and syncs every 60s. |
+| `--api-port <port>` | Set the API port (default: 8080) |
+| `--port <port>` | Set the P2P port (default: random) |
+| `--peer <addr>` | Connect to a specific libp2p peer |
 
 ## Contributing
 
 PRs welcome. Some areas where help is needed:
 
-- **Smart contracts** - Agent-programmable logic on the DAG
 - **Cross-chain bridges** - ETH/SOL bridging for IOTAI
 - **Mobile wallet** - React Native or Flutter app
-- **SDK libraries** - Python, Go, Rust client libraries
+- **Governance / Voting** - On-chain voting system
+- **Staking** - Delegated validation with fee rewards
 - **Load testing** - Benchmark with 1000+ concurrent agents
 
 ```bash
