@@ -45,7 +45,9 @@ describe('Storage._serializeState / _restoreState', () => {
 
     assert.equal(dag2.transactions.size, 2);
     assert.ok(dag2.getTransaction(tx.id));
-    assert.equal(dag2.getBalance(address), 5000 - 100);
+    // Balance accounts for 1% fee (min 1 IOTAI): 5000 - 100 - 1 fee = 4899
+    const fee = tx.fee || 0;
+    assert.equal(dag2.getBalance(address), 5000 - 100 - fee);
     assert.equal(dag2.getBalance('iotai_bob'), 100);
   });
 

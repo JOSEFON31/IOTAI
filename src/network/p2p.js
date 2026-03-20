@@ -204,24 +204,53 @@ export class P2PSync {
     let rejected = 0;
     let duplicate = 0;
 
-    for (const tx of transactions) {
-      if (!tx || !tx.id) { rejected++; continue; }
+    // Sort by timestamp to ensure parents arrive before children
+    const sorted = [...transactions].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
-      // Skip if already have it
-      if (this.dag.transactions.has(tx.id)) {
-        duplicate++;
-        this.recentlySynced.add(tx.id);
-        continue;
+    // Multi-pass: some txs may depend on parents that arrive in the same batch
+    let pending = sorted;
+    let maxPasses = 5;
+
+    while (pending.length > 0 && maxPasses-- > 0) {
+      const stillPending = [];
+
+      for (const tx of pending) {
+        if (!tx || !tx.id) { rejected++; continue; }
+
+        // Skip if already have it
+        if (this.dag.transactions.has(tx.id)) {
+          duplicate++;
+          this.recentlySynced.add(tx.id);
+          continue;
+        }
+
+        // Check if all parents exist
+        const parentsReady = (tx.parents || []).every(pid => this.dag.transactions.has(pid));
+        if (!parentsReady) {
+          stillPending.push(tx);
+          continue;
+        }
+
+        // Validate and add
+        const result = this.dag.addTransaction(tx);
+        if (result.success) {
+          accepted++;
+          this.recentlySynced.add(tx.id);
+        } else {
+          rejected++;
+        }
       }
 
-      // Validate and add
-      const result = this.dag.addTransaction(tx);
-      if (result.success) {
-        accepted++;
-        this.recentlySynced.add(tx.id);
-      } else {
-        rejected++;
+      // If no progress was made, stop trying
+      if (stillPending.length === pending.length) {
+        rejected += stillPending.length;
+        break;
       }
+      pending = stillPending;
+    }
+
+    if (accepted > 0) {
+      console.log(`[P2P] Imported ${accepted} txs (${duplicate} dup, ${rejected} rejected)`);
     }
 
     return { accepted, rejected, duplicate, total: transactions.length };
@@ -309,39 +338,54 @@ export class P2PSync {
       return { received: 0, sent: 0 };
     }
 
-    // 3. Get transactions we're missing
-    // Send our tx IDs, peer responds with txs we don't have
+    // 3. Pull: Request transactions we're missing from the peer
     const ourTxIds = [...this.dag.transactions.keys()];
-
-    // Request missing transactions from peer
-    const missingFromUs = await this._request(url, '/api/v1/p2p/transactions', {
-      transactions: [], // empty = request mode
-      knownTxIds: ourTxIds.slice(-1000), // send recent 1000 IDs
+    const pullResponse = await this._request(url, '/api/v1/p2p/transactions', {
+      knownTxIds: ourTxIds,
       fromNode: this.nodeId,
       requestMissing: true,
     });
 
-    if (missingFromUs?.accepted !== undefined) {
-      // Peer sent us back their accept count, we may have sent them txs
+    // Process received transactions (they come sorted by timestamp)
+    if (pullResponse?.transactions && Array.isArray(pullResponse.transactions)) {
+      for (const tx of pullResponse.transactions) {
+        if (!tx || !tx.id || this.dag.transactions.has(tx.id)) continue;
+        const result = this.dag.addTransaction(tx);
+        if (result.success) {
+          received++;
+          this.recentlySynced.add(tx.id);
+        }
+      }
+      peer.txReceived += received;
+      if (received > 0) {
+        console.log(`[P2P] Received ${received} txs from ${peer.nodeId?.substring(0, 8) || url}`);
+      }
     }
 
-    // 4. Push our transactions to the peer (ones they might be missing)
-    const recentTxs = [...this.dag.transactions.values()]
-      .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(0, 100) // send most recent 100
-      .filter(tx => !this.recentlySynced.has(tx.id));
+    // 4. Push: Send our transactions that the peer is missing
+    // Get peer's known tx IDs by asking them what they have
+    const peerTxIds = new Set();
+    // We know from pullResponse which txs they sent us (they had those)
+    // For a full push, send all our txs that aren't in the recently synced set
+    const pushTxs = [...this.dag.transactions.values()]
+      .filter(tx => !this.recentlySynced.has(tx.id))
+      .sort((a, b) => a.timestamp - b.timestamp);
 
-    if (recentTxs.length > 0) {
-      const pushResult = await this._request(url, '/api/v1/p2p/transactions', {
-        transactions: recentTxs,
-        fromNode: this.nodeId,
-      });
-      sent = pushResult?.accepted || 0;
+    if (pushTxs.length > 0) {
+      // Send in batches of 200 to avoid huge payloads
+      for (let i = 0; i < pushTxs.length; i += 200) {
+        const batch = pushTxs.slice(i, i + 200);
+        const pushResult = await this._request(url, '/api/v1/p2p/transactions', {
+          transactions: batch,
+          fromNode: this.nodeId,
+        });
+        sent += pushResult?.accepted || 0;
+      }
       peer.txSent += sent;
     }
 
-    // Mark as synced
-    for (const tx of recentTxs) {
+    // Mark all our txs as synced with this peer
+    for (const tx of pushTxs) {
       this.recentlySynced.add(tx.id);
     }
 
@@ -364,7 +408,9 @@ export class P2PSync {
       }
 
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
+      // Longer timeout for sync requests (may transfer many txs)
+      const timeoutMs = (body?.requestMissing || body?.transactions?.length > 10) ? 30000 : 10000;
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
       options.signal = controller.signal;
 
       const res = await fetch(fullUrl, options);

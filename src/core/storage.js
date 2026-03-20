@@ -116,6 +116,16 @@ export class Storage {
       this.dag.balances = new Map(Object.entries(state.balances).map(([k, v]) => [k, Number(v)]));
     }
 
+    // Rebuild balance index (addressIndex, totalSent, totalReceived, txCount)
+    for (const tx of this.dag.transactions.values()) {
+      if (tx.type === 'transfer') {
+        this.dag._updateBalanceIndex(tx.from, tx.id, tx.amount + (tx.fee || 0), 0);
+        this.dag._updateBalanceIndex(tx.to, tx.id, 0, tx.amount);
+      } else if (tx.type === 'data' && tx.from) {
+        this.dag._updateBalanceIndex(tx.from, tx.id, 0, 0);
+      }
+    }
+
     // Restore nonces: merge saved nonce set with nonces from transactions
     // This prevents replay attacks even if the saved nonce set was incomplete
     if (state.nonces) {
@@ -254,7 +264,13 @@ export class Storage {
       );
 
       if (!res.ok) {
-        console.log(`[Storage] No GitHub state found (${res.status})`);
+        if (res.status === 401) {
+          console.error('[Storage] GitHub authentication FAILED - check GITHUB_TOKEN is valid');
+        } else if (res.status === 404) {
+          console.log('[Storage] No GitHub state file found (first run on data branch)');
+        } else {
+          console.log(`[Storage] GitHub load failed (HTTP ${res.status})`);
+        }
         return null;
       }
 

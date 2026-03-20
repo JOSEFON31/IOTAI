@@ -81,7 +81,9 @@ describe('DAG.addTransaction', () => {
     });
 
     dag.addTransaction(tx);
-    assert.equal(dag.getBalance(address), 10_000 - 100);
+    // Balance accounts for 1% fee (min 1 IOTAI): 10000 - 100 - fee
+    const fee = tx.fee || 0;
+    assert.equal(dag.getBalance(address), 10_000 - 100 - fee);
     assert.equal(dag.getBalance('iotai_recipient'), 100);
   });
 

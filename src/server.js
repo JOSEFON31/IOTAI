@@ -460,6 +460,8 @@ async function handleAPI(req, path, body) {
     if (!v.valid) return { status: 400, data: { error: v.error } };
     const r = dag.addTransaction(tx);
     if (!r.success) return { status: 400, data: { error: r.error } };
+    // Broadcast to peers
+    p2p.broadcastTransaction(tx).catch(() => {});
     // Evaluate smart contracts
     const triggered = contracts.evaluate(tx);
     return { status: 200, data: { txId: tx.id, from: tx.from, to: tx.to, amount: tx.amount, fee: tx.fee || 0, status: 'confirmed', contractsTriggered: triggered.length } };
@@ -469,6 +471,8 @@ async function handleAPI(req, path, body) {
     const tips = dag.selectTips();
     const tx = session.wallet.sendData(tips, body.metadata);
     dag.addTransaction(tx);
+    // Broadcast to peers
+    p2p.broadcastTransaction(tx).catch(() => {});
     const triggered = contracts.evaluate(tx);
     return { status: 200, data: { txId: tx.id, metadata: tx.metadata, contractsTriggered: triggered.length } };
   }
@@ -597,6 +601,18 @@ async function handleAPI(req, path, body) {
     return { status: 200, data: result };
   }
   if (method === 'POST' && path === '/api/v1/p2p/transactions') {
+    // Mode 1: Peer is requesting transactions they're missing
+    if (body?.requestMissing && body?.knownTxIds) {
+      const knownSet = new Set(body.knownTxIds);
+      const missing = [];
+      for (const [id, tx] of dag.transactions) {
+        if (!knownSet.has(id)) missing.push(tx);
+      }
+      // Sort by timestamp to ensure correct ordering on the receiver
+      missing.sort((a, b) => a.timestamp - b.timestamp);
+      return { status: 200, data: { transactions: missing, total: missing.length } };
+    }
+    // Mode 2: Peer is pushing transactions to us
     const result = p2p.handleIncomingTransactions(body?.transactions || []);
     return { status: 200, data: result };
   }
