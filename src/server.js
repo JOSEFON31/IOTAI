@@ -448,6 +448,47 @@ async function handleAPI(req, path, body) {
     return { status: 200, data: marketplace.getTopSellers(10) };
   }
 
+  // ---- P2P Sync Routes (public, no auth required) ----
+  if (method === 'GET' && path === '/api/v1/network/peers') {
+    return { status: 200, data: p2p.getPeers() };
+  }
+  if (method === 'POST' && path === '/api/v1/network/peers/add') {
+    if (!body?.url) return { status: 400, data: { error: 'url required' } };
+    const result = await p2p.addPeer(body.url);
+    return { status: result.success ? 200 : 400, data: result };
+  }
+  if (method === 'POST' && path === '/api/v1/network/sync') {
+    const result = await p2p.syncWithPeers();
+    return { status: 200, data: result };
+  }
+  if (method === 'GET' && path === '/api/v1/network/node-info') {
+    return { status: 200, data: p2p.getNodeInfo() };
+  }
+  // Peer-to-peer internal endpoints (called by other nodes)
+  if (method === 'POST' && path === '/api/v1/p2p/handshake') {
+    const result = p2p.handleHandshake(body);
+    return { status: 200, data: result };
+  }
+  if (method === 'POST' && path === '/api/v1/p2p/transactions') {
+    // Mode 1: Peer is requesting transactions they're missing
+    if (body?.requestMissing && body?.knownTxIds) {
+      const knownSet = new Set(body.knownTxIds);
+      const missing = [];
+      for (const [id, tx] of dag.transactions) {
+        if (!knownSet.has(id)) missing.push(tx);
+      }
+      // Sort by timestamp to ensure correct ordering on the receiver
+      missing.sort((a, b) => a.timestamp - b.timestamp);
+      return { status: 200, data: { transactions: missing, total: missing.length } };
+    }
+    // Mode 2: Peer is pushing transactions to us
+    const result = p2p.handleIncomingTransactions(body?.transactions || []);
+    return { status: 200, data: result };
+  }
+  if (method === 'GET' && path === '/api/v1/p2p/state') {
+    return { status: 200, data: p2p.getStateDigest() };
+  }
+
   // Auth required
   const session = authenticate(req);
   if (!session) return { status: 401, data: { error: 'Invalid or expired token' } };
@@ -577,47 +618,6 @@ async function handleAPI(req, path, body) {
     const status = marketplace.getEscrowStatus(purchaseId);
     if (!status) return { status: 404, data: { error: 'Purchase not found' } };
     return { status: 200, data: status };
-  }
-
-  // ---- P2P Sync Routes ----
-  if (method === 'GET' && path === '/api/v1/network/peers') {
-    return { status: 200, data: p2p.getPeers() };
-  }
-  if (method === 'POST' && path === '/api/v1/network/peers/add') {
-    if (!body?.url) return { status: 400, data: { error: 'url required' } };
-    const result = await p2p.addPeer(body.url);
-    return { status: result.success ? 200 : 400, data: result };
-  }
-  if (method === 'POST' && path === '/api/v1/network/sync') {
-    const result = await p2p.syncWithPeers();
-    return { status: 200, data: result };
-  }
-  if (method === 'GET' && path === '/api/v1/network/node-info') {
-    return { status: 200, data: p2p.getNodeInfo() };
-  }
-  // Peer-to-peer internal endpoints (called by other nodes)
-  if (method === 'POST' && path === '/api/v1/p2p/handshake') {
-    const result = p2p.handleHandshake(body);
-    return { status: 200, data: result };
-  }
-  if (method === 'POST' && path === '/api/v1/p2p/transactions') {
-    // Mode 1: Peer is requesting transactions they're missing
-    if (body?.requestMissing && body?.knownTxIds) {
-      const knownSet = new Set(body.knownTxIds);
-      const missing = [];
-      for (const [id, tx] of dag.transactions) {
-        if (!knownSet.has(id)) missing.push(tx);
-      }
-      // Sort by timestamp to ensure correct ordering on the receiver
-      missing.sort((a, b) => a.timestamp - b.timestamp);
-      return { status: 200, data: { transactions: missing, total: missing.length } };
-    }
-    // Mode 2: Peer is pushing transactions to us
-    const result = p2p.handleIncomingTransactions(body?.transactions || []);
-    return { status: 200, data: result };
-  }
-  if (method === 'GET' && path === '/api/v1/p2p/state') {
-    return { status: 200, data: p2p.getStateDigest() };
   }
 
   // ---- Smart Contract Routes ----
