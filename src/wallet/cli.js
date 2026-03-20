@@ -229,7 +229,12 @@ async function cmdInfo() {
 }
 
 async function getToken(passphrase) {
-  const data = await api('POST', '/api/v1/auth/token', { passphrase });
+  // Detect if it's a 12-word mnemonic or a legacy passphrase
+  const words = passphrase.trim().split(/\s+/);
+  const body = words.length === 12
+    ? { mnemonic: passphrase }
+    : { passphrase };
+  const data = await api('POST', '/api/v1/auth/token', body);
   return data.token;
 }
 

@@ -12,6 +12,7 @@
  *   node src/index.js --port 4001        # Custom P2P port
  *   node src/index.js --api-port 8080    # Custom API port
  *   node src/index.js --peer /ip4/...    # Connect to a specific peer
+ *   node src/index.js --sync-from https://iotai.onrender.com  # Sync from remote
  */
 
 import { DAG } from './core/dag.js';
@@ -31,6 +32,66 @@ function getArg(name, defaultValue) {
 const p2pPort = parseInt(getArg('--port', '0'), 10);
 const apiPort = parseInt(getArg('--api-port', '8080'), 10);
 const peerAddr = getArg('--peer', null);
+const syncFrom = getArg('--sync-from', null); // HTTP URL to sync from (e.g. https://iotai.onrender.com)
+
+/**
+ * Sync DAG state from a remote HTTP node (e.g. Render server)
+ * Downloads all transactions and replays them into the local DAG
+ */
+async function syncFromRemote(dag, remoteUrl) {
+  const url = remoteUrl.replace(/\/$/, '');
+
+  // 1. Get remote state digest
+  const stateRes = await fetch(`${url}/api/v1/p2p/state`);
+  if (!stateRes.ok) throw new Error(`Remote state request failed: ${stateRes.status}`);
+  const remoteState = await stateRes.json();
+  console.log(`[Sync] Remote has ${remoteState.txCount} txs`);
+
+  if (remoteState.txCount <= 1) {
+    console.log('[Sync] Remote has no transactions to sync');
+    return;
+  }
+
+  // 2. Request missing transactions
+  const ourTxIds = [...dag.transactions.keys()];
+  const syncRes = await fetch(`${url}/api/v1/p2p/transactions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      knownTxIds: ourTxIds,
+      requestMissing: true,
+    }),
+  });
+
+  if (!syncRes.ok) throw new Error(`Remote sync request failed: ${syncRes.status}`);
+  const syncData = await syncRes.json();
+
+  if (!syncData.transactions || syncData.transactions.length === 0) {
+    console.log('[Sync] Already up to date');
+    return;
+  }
+
+  // 3. Sort by timestamp and add to DAG (multi-pass for parent dependencies)
+  const txs = syncData.transactions.sort((a, b) => a.timestamp - b.timestamp);
+  let added = 0;
+  let pending = txs;
+  let maxPasses = 5;
+
+  while (pending.length > 0 && maxPasses-- > 0) {
+    const stillPending = [];
+    for (const tx of pending) {
+      if (!tx || !tx.id || dag.transactions.has(tx.id)) continue;
+      const parentsReady = (tx.parents || []).every(pid => dag.transactions.has(pid));
+      if (!parentsReady) { stillPending.push(tx); continue; }
+      const result = dag.addTransaction(tx);
+      if (result.success) added++;
+    }
+    if (stillPending.length === pending.length) break;
+    pending = stillPending;
+  }
+
+  console.log(`[Sync] Imported ${added} transactions from remote`);
+}
 
 async function main() {
   console.log('');
@@ -58,6 +119,18 @@ async function main() {
   } else {
     console.log(`  Restored: ${dag.transactions.size} txs`);
   }
+
+  // Sync from remote node if specified (downloads full state via HTTP)
+  if (syncFrom) {
+    console.log(`[Sync] Downloading state from ${syncFrom}...`);
+    try {
+      await syncFromRemote(dag, syncFrom);
+      storage.save({ forceGithub: true });
+    } catch (err) {
+      console.error(`[Sync] Failed to sync from remote: ${err.message}`);
+    }
+  }
+
   storage.start();
 
   // ---- Step 2: Start P2P Node ----
@@ -102,6 +175,19 @@ async function main() {
   console.log(`  GET  /api/v1/history        - Transaction history`);
   console.log(`  GET  /api/v1/network/stats  - Network stats`);
   console.log('');
+
+  // Periodic sync with remote node (every 60s)
+  if (syncFrom) {
+    setInterval(async () => {
+      try {
+        await syncFromRemote(dag, syncFrom);
+        storage.save();
+      } catch (err) {
+        console.error(`[Sync] Periodic sync error: ${err.message}`);
+      }
+    }, 60000);
+    console.log(`  Remote sync: ${syncFrom} (every 60s)`);
+  }
 
   // Listen for new transactions and syncs
   node.on('transaction:received', (tx) => {
