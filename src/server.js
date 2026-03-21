@@ -32,6 +32,7 @@ import { RateLimiter } from './api/rate-limiter.js';
 import { TokenManager } from './tokens/token-manager.js';
 import { BatchProcessor } from './core/batch.js';
 import { EncryptionLayer } from './core/encryption.js';
+import { Social } from './social/social.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DOCS_DIR = resolve(__dirname, '../docs');
@@ -47,6 +48,7 @@ let orchestrator; // initialized after DAG loads
 let tokenManager; // initialized after DAG loads
 let batchProcessor; // initialized after DAG loads
 let encryption;  // initialized after DAG loads
+let social;      // initialized after DAG loads
 const rateLimiter = new RateLimiter();
 const p2p = new P2PSync({
   dag,
@@ -125,6 +127,9 @@ async function initialize() {
 
   // Initialize encryption layer
   encryption = new EncryptionLayer({ dag });
+
+  // Initialize social network
+  social = new Social({ dag });
 }
 
 await initialize();
@@ -446,6 +451,60 @@ async function handleAPI(req, path, body) {
   }
   if (method === 'GET' && path === '/api/v1/marketplace/top-sellers') {
     return { status: 200, data: marketplace.getTopSellers(10) };
+  }
+
+  // ---- Social Network Public Routes ----
+  if (method === 'GET' && path === '/api/v1/social/stats') {
+    return { status: 200, data: social.getStats() };
+  }
+  if (method === 'GET' && path.startsWith('/api/v1/social/profile/')) {
+    const addr = path.split('/api/v1/social/profile/')[1];
+    const profile = social.getProfile(addr);
+    if (!profile) return { status: 404, data: { error: 'Profile not found' } };
+    return { status: 200, data: profile };
+  }
+  if (method === 'GET' && path.startsWith('/api/v1/social/user/')) {
+    const rest = path.split('/api/v1/social/user/')[1];
+    if (rest.includes('/posts')) {
+      const addr = rest.replace('/posts', '');
+      return { status: 200, data: social.getUserPosts(addr, { limit: parseInt(url.searchParams?.get('limit') || '20'), offset: parseInt(url.searchParams?.get('offset') || '0') }) };
+    }
+    if (rest.includes('/followers')) {
+      const addr = rest.replace('/followers', '');
+      return { status: 200, data: social.getFollowers(addr) };
+    }
+    if (rest.includes('/following')) {
+      const addr = rest.replace('/following', '');
+      return { status: 200, data: social.getFollowing(addr) };
+    }
+    const profile = social.getProfileByUsername(rest);
+    if (!profile) return { status: 404, data: { error: 'User not found' } };
+    return { status: 200, data: profile };
+  }
+  if (method === 'GET' && path.startsWith('/api/v1/social/post/')) {
+    const rest = path.split('/api/v1/social/post/')[1];
+    if (rest.includes('/comments')) {
+      const postId = rest.replace('/comments', '');
+      return { status: 200, data: social.getComments(postId) };
+    }
+    const post = social.getPost(rest);
+    if (!post) return { status: 404, data: { error: 'Post not found' } };
+    return { status: 200, data: post };
+  }
+  if (method === 'GET' && path === '/api/v1/social/feed/global') {
+    const limit = parseInt(url.searchParams?.get('limit') || '20');
+    const offset = parseInt(url.searchParams?.get('offset') || '0');
+    return { status: 200, data: social.getGlobalFeed({ limit, offset }) };
+  }
+  if (method === 'GET' && path === '/api/v1/social/forums') {
+    return { status: 200, data: social.getForums() };
+  }
+  if (method === 'GET' && path.startsWith('/api/v1/social/forum/')) {
+    const forumId = path.split('/api/v1/social/forum/')[1];
+    const limit = parseInt(url.searchParams?.get('limit') || '20');
+    const offset = parseInt(url.searchParams?.get('offset') || '0');
+    const forumData = social.getForumPosts(forumId, { limit, offset });
+    return { status: 200, data: { forum: social.forums.get(forumId) || null, posts: forumData.posts } };
   }
 
   // ---- P2P Sync Routes (public, no auth required) ----
@@ -800,6 +859,72 @@ async function handleAPI(req, path, body) {
   }
   if (method === 'GET' && path === '/api/v1/encryption/sent') {
     return { status: 200, data: encryption.getSent(session.wallet.address) };
+  }
+
+  // ---- Social Network Authenticated Routes ----
+  if (method === 'POST' && path === '/api/v1/social/profile') {
+    try {
+      const tips = dag.selectTips();
+      const result = social.createProfile(session.wallet, tips, body);
+      return { status: 201, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/social/profile/update') {
+    try {
+      const tips = dag.selectTips();
+      const result = social.updateProfile(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/social/post') {
+    try {
+      const tips = dag.selectTips();
+      const result = social.createPost(session.wallet, tips, body);
+      return { status: 201, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/social/comment') {
+    try {
+      const tips = dag.selectTips();
+      const result = social.createComment(session.wallet, tips, body);
+      return { status: 201, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/social/follow') {
+    try {
+      const tips = dag.selectTips();
+      const result = social.follow(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/social/unfollow') {
+    try {
+      const tips = dag.selectTips();
+      const result = social.unfollow(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/social/forum') {
+    try {
+      const tips = dag.selectTips();
+      const result = social.createForum(session.wallet, tips, body);
+      return { status: 201, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/social/like') {
+    try {
+      const tips = dag.selectTips();
+      const result = social.likePost(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'GET' && path === '/api/v1/social/feed') {
+    const limit = parseInt(url.searchParams?.get('limit') || '20');
+    const offset = parseInt(url.searchParams?.get('offset') || '0');
+    return { status: 200, data: social.getFeed(session.wallet.address, { limit, offset }) };
+  }
+  if (method === 'GET' && path === '/api/v1/social/my/profile') {
+    return { status: 200, data: social.getProfile(session.wallet.address) };
   }
 
   return { status: 404, data: { error: 'Not found' } };
