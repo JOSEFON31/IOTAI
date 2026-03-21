@@ -492,8 +492,8 @@ async function loadStats() {
     document.getElementById('stats-grid').innerHTML = `
       <div class="stat-card"><div class="num">${s.openOrders}</div><div class="lbl">Open Orders</div></div>
       <div class="stat-card"><div class="num">${s.completedTrades}</div><div class="lbl">Completed Trades</div></div>
-      <div class="stat-card"><div class="num">$${s.totalVolumeUsdc}</div><div class="lbl">Volume (USDT)</div></div>
-      <div class="stat-card"><div class="num">${s.avgPriceUsdc > 0 ? '$' + s.avgPriceUsdc : '-'}</div><div class="lbl">Avg Price</div></div>
+      <div class="stat-card"><div class="num">$${s.totalVolumeUsdt}</div><div class="lbl">Volume (USDT)</div></div>
+      <div class="stat-card"><div class="num">${s.avgPriceUsdt > 0 ? '$' + s.avgPriceUsdt : '-'}</div><div class="lbl">Avg Price</div></div>
     `;
   } catch {}
 }
@@ -520,7 +520,7 @@ async function loadMarket() {
           <span style="flex:1;font-size:13px" class="mono">${shortAddr(o.seller)}</span>
           <span style="flex:1;text-align:center;font-weight:bold;color:var(--accent)">${o.amountIotai.toLocaleString()} IOTAI</span>
           <span style="flex:1;text-align:center;color:var(--green)">$${o.pricePerIotai}</span>
-          <span style="flex:1;text-align:center;font-weight:bold;color:var(--yellow)">$${o.totalUsdc}</span>
+          <span style="flex:1;text-align:center;font-weight:bold;color:var(--yellow)">$${o.totalUsdt}</span>
           <span style="flex:1;text-align:right">
             ${o.seller === state.address ? '<span style="color:var(--muted);font-size:12px">Your order</span>' :
               `<button class="btn btn-green btn-small" onclick="buyOrder('${o.orderId}')">Buy</button>`}
@@ -546,7 +546,7 @@ async function createSellOrder() {
   if (!state.tronAddress) return toast('Register your USDT wallet first', true);
   try {
     const result = await api('POST', '/api/v1/exchange/create-order', { amountIotai, pricePerIotai });
-    toast(`Order created! Selling ${result.amountIotai} IOTAI for $${result.totalUsdc} USDT`);
+    toast(`Order created! Selling ${result.amountIotai} IOTAI for $${result.totalUsdt} USDT`);
     document.getElementById('sell-amount').value = '';
     calcTotal();
     showTab('myorders');
@@ -569,7 +569,7 @@ async function buyOrder(orderId) {
       <div class="info-box" style="border-color:var(--yellow)">
         <h4 style="color:var(--yellow);margin-bottom:8px">Transfer USDT to complete this purchase</h4>
         <table style="width:100%;font-size:14px;border-collapse:collapse">
-          <tr><td style="padding:6px 0;color:var(--muted)">Amount:</td><td style="font-weight:bold;color:var(--green)">$${result.totalUsdc} USDT</td></tr>
+          <tr><td style="padding:6px 0;color:var(--muted)">Amount:</td><td style="font-weight:bold;color:var(--green)">$${result.totalUsdt} USDT</td></tr>
           <tr><td style="padding:6px 0;color:var(--muted)">Network:</td><td style="font-weight:bold">Tron (TRC-20)</td></tr>
           <tr><td style="padding:6px 0;color:var(--muted)">Send to:</td><td class="mono" style="color:var(--yellow);word-break:break-all">${result.payTo}</td></tr>
           <tr><td style="padding:6px 0;color:var(--muted)">Memo:</td><td class="mono" style="color:var(--accent);font-size:16px;font-weight:bold">${result.memoCode}</td></tr>
@@ -654,7 +654,7 @@ async function loadMyOrders() {
         <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:14px">
           <div><span style="color:var(--muted)">Amount:</span> <strong style="color:var(--accent)">${o.amountIotai} IOTAI</strong></div>
           <div><span style="color:var(--muted)">Price:</span> <strong style="color:var(--green)">$${o.pricePerIotai}/IOTAI</strong></div>
-          <div><span style="color:var(--muted)">Total:</span> <strong style="color:var(--yellow)">$${o.totalUsdc} USDT</strong></div>
+          <div><span style="color:var(--muted)">Total:</span> <strong style="color:var(--yellow)">$${o.totalUsdt} USDT</strong></div>
           <div><span style="color:var(--muted)">Role:</span> <strong>${isSeller ? 'Seller' : 'Buyer'}</strong></div>
         </div>
         ${o.memoCode ? `<div style="font-size:12px;margin-top:6px;color:var(--muted)">Memo: <span class="mono" style="color:var(--accent)">${o.memoCode}</span></div>` : ''}

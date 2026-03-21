@@ -911,12 +911,12 @@ async function handleAPI(req, path, body) {
   if (method === 'POST' && path === '/api/v1/exchange/register-wallet') {
     try {
       const tips = dag.selectTips();
-      const result = exchange.registerUsdcWallet(session.wallet, tips, body);
+      const result = exchange.registerUsdtWallet(session.wallet, tips, body);
       return { status: 200, data: result };
     } catch (e) { return { status: 400, data: { error: e.message } }; }
   }
   if (method === 'GET' && path === '/api/v1/exchange/my-wallet') {
-    return { status: 200, data: { tronAddress: exchange.getUsdcWallet(session.wallet.address) } };
+    return { status: 200, data: { tronAddress: exchange.getUsdtWallet(session.wallet.address) } };
   }
   if (method === 'POST' && path === '/api/v1/exchange/create-order') {
     try {

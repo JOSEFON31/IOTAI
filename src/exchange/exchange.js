@@ -40,7 +40,7 @@ export class Exchange {
     /** @type {Map<string, object>} orderId -> order */
     this.orders = new Map();
     /** @type {Map<string, string>} address -> tronAddress */
-    this.usdcWallets = new Map();
+    this.usdtWallets = new Map();
 
     this._rebuildIndex();
   }
@@ -49,7 +49,7 @@ export class Exchange {
   // USDT WALLET REGISTRATION
   // ============================================================
 
-  registerUsdcWallet(wallet, tips, { tronAddress }) {
+  registerUsdtWallet(wallet, tips, { tronAddress }) {
     if (!tronAddress) throw new Error('Tron address required');
     if (!/^T[a-zA-Z0-9]{33}$/.test(tronAddress)) {
       throw new Error('Invalid Tron address format (must start with T, 34 chars)');
@@ -66,12 +66,12 @@ export class Exchange {
     const result = this.dag.addTransaction(tx);
     if (!result.success) throw new Error(result.error);
 
-    this.usdcWallets.set(wallet.address, tronAddress);
+    this.usdtWallets.set(wallet.address, tronAddress);
     return { txId: tx.id, tronAddress };
   }
 
-  getUsdcWallet(address) {
-    return this.usdcWallets.get(address) || null;
+  getUsdtWallet(address) {
+    return this.usdtWallets.get(address) || null;
   }
 
   // ============================================================
@@ -84,7 +84,7 @@ export class Exchange {
       throw new Error(`Minimum price is ${MIN_PRICE_PER_IOTAI} USDT per IOTAI`);
     }
 
-    const sellerTron = this.usdcWallets.get(wallet.address);
+    const sellerTron = this.usdtWallets.get(wallet.address);
     if (!sellerTron) throw new Error('Register your USDT wallet first');
 
     // Check seller balance
@@ -93,7 +93,7 @@ export class Exchange {
 
     const orderId = this._generateId();
     const escrowAddress = ESCROW_PREFIX + orderId;
-    const totalUsdc = Math.round(amountIotai * pricePerIotai * 100) / 100;
+    const totalUsdt = Math.round(amountIotai * pricePerIotai * 100) / 100;
 
     // Lock IOTAI in escrow
     const escrowTx = wallet.send(escrowAddress, amountIotai, tips, {
@@ -112,7 +112,7 @@ export class Exchange {
       sellerTron,
       amountIotai,
       pricePerIotai,
-      totalUsdc,
+      totalUsdt,
       escrowAddress,
       status: 'open',
       createdAt: Date.now(),
@@ -125,7 +125,7 @@ export class Exchange {
     if (!result.success) throw new Error(result.error);
 
     this._indexOrder(tx);
-    return { orderId, txId: tx.id, amountIotai, pricePerIotai, totalUsdc, escrowAddress };
+    return { orderId, txId: tx.id, amountIotai, pricePerIotai, totalUsdt, escrowAddress };
   }
 
   cancelOrder(wallet, tips, { orderId }) {
@@ -167,7 +167,7 @@ export class Exchange {
     if (order.status !== 'open') throw new Error('Order not available (status: ' + order.status + ')');
     if (order.seller === wallet.address) throw new Error('Cannot buy your own order');
 
-    const buyerTron = this.usdcWallets.get(wallet.address);
+    const buyerTron = this.usdtWallets.get(wallet.address);
     if (!buyerTron) throw new Error('Register your USDT wallet first');
 
     // Check if order expired
@@ -204,10 +204,10 @@ export class Exchange {
       status: 'claimed',
       memoCode,
       payTo: order.sellerTron,
-      totalUsdc: order.totalUsdc,
+      totalUsdt: order.totalUsdt,
       amountIotai: order.amountIotai,
       paymentDeadline: order.paymentDeadline,
-      instructions: `Transfer ${order.totalUsdc} USDT (TRC-20) to ${order.sellerTron}. Use memo: ${memoCode}`,
+      instructions: `Transfer ${order.totalUsdt} USDT (TRC-20) to ${order.sellerTron}. Use memo: ${memoCode}`,
     };
   }
 
@@ -226,7 +226,7 @@ export class Exchange {
     try {
       verified = await this._verifyTronTransaction(tronTxHash, {
         expectedTo: order.sellerTron,
-        expectedAmount: order.totalUsdc,
+        expectedAmount: order.totalUsdt,
       });
     } catch (e) {
       verifyError = e.message;
@@ -290,7 +290,7 @@ export class Exchange {
       orderId: order.orderId,
       status: 'completed',
       amountIotai: order.amountIotai,
-      totalUsdc: order.totalUsdc,
+      totalUsdt: order.totalUsdt,
       buyer: order.buyer,
       seller: order.seller,
       tronTxHash,
@@ -382,7 +382,7 @@ export class Exchange {
   getStats() {
     const orders = [...this.orders.values()];
     const completed = orders.filter(o => o.status === 'completed');
-    const totalVolume = completed.reduce((s, o) => s + o.totalUsdc, 0);
+    const totalVolume = completed.reduce((s, o) => s + o.totalUsdt, 0);
     const avgPrice = completed.length > 0
       ? completed.reduce((s, o) => s + o.pricePerIotai, 0) / completed.length
       : 0;
@@ -391,9 +391,9 @@ export class Exchange {
       totalOrders: orders.length,
       openOrders: orders.filter(o => o.status === 'open').length,
       completedTrades: completed.length,
-      totalVolumeUsdc: Math.round(totalVolume * 100) / 100,
-      avgPriceUsdc: Math.round(avgPrice * 10000) / 10000,
-      registeredWallets: this.usdcWallets.size,
+      totalVolumeUsdt: Math.round(totalVolume * 100) / 100,
+      avgPriceUsdt: Math.round(avgPrice * 10000) / 10000,
+      registeredWallets: this.usdtWallets.size,
     };
   }
 
@@ -444,7 +444,7 @@ export class Exchange {
 
   _rebuildIndex() {
     this.orders.clear();
-    this.usdcWallets.clear();
+    this.usdtWallets.clear();
 
     const txs = [...this.dag.transactions.values()]
       .filter(tx => tx.metadata?._exchange)
@@ -468,7 +468,7 @@ export class Exchange {
 
   _indexWallet(tx) {
     const m = tx.metadata;
-    this.usdcWallets.set(m.author || tx.from, m.tronAddress);
+    this.usdtWallets.set(m.author || tx.from, m.tronAddress);
   }
 
   _indexOrder(tx) {
@@ -480,7 +480,7 @@ export class Exchange {
       sellerTron: m.sellerTron,
       amountIotai: m.amountIotai,
       pricePerIotai: m.pricePerIotai,
-      totalUsdc: m.totalUsdc,
+      totalUsdt: m.totalUsdt,
       escrowAddress: m.escrowAddress,
       status: m.status || 'open',
       createdAt: m.createdAt,
