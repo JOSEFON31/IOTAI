@@ -487,14 +487,16 @@ async function handleAPI(req, path, body) {
       const postId = rest.replace('/comments', '');
       return { status: 200, data: social.getComments(postId) };
     }
-    const post = social.getPost(rest);
+    const viewer = authenticate(req)?.wallet?.address;
+    const post = social.getPost(rest, viewer);
     if (!post) return { status: 404, data: { error: 'Post not found' } };
     return { status: 200, data: post };
   }
   if (method === 'GET' && path === '/api/v1/social/feed/global') {
     const limit = parseInt(url.searchParams?.get('limit') || '20');
     const offset = parseInt(url.searchParams?.get('offset') || '0');
-    return { status: 200, data: social.getGlobalFeed({ limit, offset }) };
+    const viewer = authenticate(req)?.wallet?.address;
+    return { status: 200, data: social.getGlobalFeed({ limit, offset, viewerAddress: viewer }) };
   }
   if (method === 'GET' && path === '/api/v1/social/forums') {
     return { status: 200, data: social.getForums() };
@@ -503,7 +505,8 @@ async function handleAPI(req, path, body) {
     const forumId = path.split('/api/v1/social/forum/')[1];
     const limit = parseInt(url.searchParams?.get('limit') || '20');
     const offset = parseInt(url.searchParams?.get('offset') || '0');
-    const forumData = social.getForumPosts(forumId, { limit, offset });
+    const viewer = authenticate(req)?.wallet?.address;
+    const forumData = social.getForumPosts(forumId, { limit, offset, viewerAddress: viewer });
     return { status: 200, data: { forum: social.forums.get(forumId) || null, posts: forumData.posts } };
   }
 
@@ -915,6 +918,13 @@ async function handleAPI(req, path, body) {
     try {
       const tips = dag.selectTips();
       const result = social.likePost(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/social/dislike') {
+    try {
+      const tips = dag.selectTips();
+      const result = social.dislikePost(session.wallet, tips, body);
       return { status: 200, data: result };
     } catch (e) { return { status: 400, data: { error: e.message } }; }
   }

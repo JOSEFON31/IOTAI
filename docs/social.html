@@ -53,7 +53,8 @@ textarea{resize:vertical;min-height:80px}
 .post-actions{display:flex;gap:16px;margin-top:10px;font-size:13px;color:var(--muted)}
 .post-actions span{cursor:pointer;display:flex;align-items:center;gap:4px}
 .post-actions span:hover{color:var(--accent)}
-.post-actions span.liked{color:var(--orange)}
+.post-actions span.liked{color:var(--green)}
+.post-actions span.disliked{color:var(--red)}
 
 /* TABS */
 .tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:16px}
@@ -236,6 +237,13 @@ textarea{resize:vertical;min-height:80px}
     <!-- GLOBAL PANEL -->
     <div id="global-panel" class="panel">
       <h2 style="font-size:20px;margin-bottom:16px">Global Feed</h2>
+      <div class="compose">
+        <textarea id="global-compose" placeholder="Share something with everyone..." maxlength="2000" oninput="updateCharCount(this,'global-chars')"></textarea>
+        <div class="compose-footer">
+          <span class="char-count" id="global-chars">0/2000</span>
+          <button class="btn btn-primary" onclick="createPostGlobal()">Post</button>
+        </div>
+      </div>
       <div id="global-posts">
         <p style="color:var(--muted);text-align:center;padding:40px">Loading...</p>
       </div>
@@ -524,7 +532,8 @@ function renderPost(post, showActions = true) {
       ${post.forumName ? '<div style="font-size:11px;color:var(--accent)">in ' + escapeHtml(post.forumName) + '</div>' : ''}
       ${showActions ? `
       <div class="post-actions">
-        <span class="${liked ? 'liked' : ''}" onclick="likePost('${post.postId}')">&#9829; ${post.likeCount || 0}</span>
+        <span class="${post.likedByMe ? 'liked' : ''}" onclick="likePost('${post.postId}')" title="Like">&#128077; ${post.likeCount || 0}</span>
+        <span class="${post.dislikedByMe ? 'disliked' : ''}" onclick="dislikePost('${post.postId}')" title="Dislike">&#128078; ${post.dislikeCount || 0}</span>
         <span onclick="viewPost('${post.postId}')">&#128172; ${post.commentCount || 0}</span>
       </div>` : ''}
     </div>`;
@@ -551,18 +560,43 @@ async function createPost(forumId) {
   } catch (e) { toast(e.message, true); }
 }
 
+async function createPostGlobal() {
+  const el = document.getElementById('global-compose');
+  const content = el.value.trim();
+  if (!content) return toast('Write something!', true);
+  try {
+    await api('POST', '/api/v1/social/post', { content });
+    el.value = '';
+    document.getElementById('global-chars').textContent = '0/2000';
+    toast('Posted!');
+    loadGlobal();
+  } catch (e) { toast(e.message, true); }
+}
+
 async function likePost(postId) {
   try {
     await api('POST', '/api/v1/social/like', { postId });
-    // Refresh whichever panel is active
-    const active = document.querySelector('.panel.active');
-    if (active) {
-      if (active.id === 'feed-panel') loadFeed();
-      else if (active.id === 'global-panel') loadGlobal();
-      else if (active.id === 'post-detail-panel') viewPost(postId);
-      else if (active.id === 'forum-view-panel' && state.currentForum) viewForum(state.currentForum);
-    }
+    refreshActivePanel(postId);
   } catch (e) { toast(e.message, true); }
+}
+
+async function dislikePost(postId) {
+  try {
+    await api('POST', '/api/v1/social/dislike', { postId });
+    refreshActivePanel(postId);
+  } catch (e) { toast(e.message, true); }
+}
+
+function refreshActivePanel(postId) {
+  const active = document.querySelector('.panel.active');
+  if (active) {
+    if (active.id === 'feed-panel') loadFeed();
+    else if (active.id === 'global-panel') loadGlobal();
+    else if (active.id === 'post-detail-panel') viewPost(postId);
+    else if (active.id === 'forum-view-panel' && state.currentForum) viewForum(state.currentForum);
+    else if (active.id === 'user-panel') { /* stays */ }
+    else if (active.id === 'profile-panel') loadMyProfile();
+  }
 }
 
 // ---- FEED ----

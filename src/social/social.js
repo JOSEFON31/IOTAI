@@ -43,6 +43,8 @@ export class Social {
     this.forums = new Map();
     /** @type {Map<string, Set<string>>} postId -> Set<address> */
     this.likes = new Map();
+    /** @type {Map<string, Set<string>>} postId -> Set<address> */
+    this.dislikes = new Map();
 
     this._rebuildIndex();
   }
@@ -236,7 +238,7 @@ export class Social {
   }
 
   /**
-   * Like or unlike a post (toggle)
+   * Like or unlike a post (toggle). Removes dislike if active.
    * @returns {{ txId: string, liked: boolean }}
    */
   likePost(wallet, tips, { postId }) {
@@ -244,6 +246,12 @@ export class Social {
 
     const postLikes = this.likes.get(postId);
     const alreadyLiked = postLikes && postLikes.has(wallet.address);
+
+    // Remove dislike if present
+    const postDislikes = this.dislikes.get(postId);
+    if (postDislikes && postDislikes.has(wallet.address)) {
+      postDislikes.delete(wallet.address);
+    }
 
     const metadata = {
       _social: 'like',
@@ -259,6 +267,38 @@ export class Social {
 
     this._indexLike(tx);
     return { txId: tx.id, liked: !alreadyLiked };
+  }
+
+  /**
+   * Dislike or un-dislike a post (toggle). Removes like if active.
+   * @returns {{ txId: string, disliked: boolean }}
+   */
+  dislikePost(wallet, tips, { postId }) {
+    if (!postId || !this.posts.has(postId)) throw new Error('Post not found');
+
+    const postDislikes = this.dislikes.get(postId);
+    const alreadyDisliked = postDislikes && postDislikes.has(wallet.address);
+
+    // Remove like if present
+    const postLikes = this.likes.get(postId);
+    if (postLikes && postLikes.has(wallet.address)) {
+      postLikes.delete(wallet.address);
+    }
+
+    const metadata = {
+      _social: 'dislike',
+      postId,
+      action: alreadyDisliked ? 'undislike' : 'dislike',
+      author: wallet.address,
+      createdAt: Date.now(),
+    };
+
+    const tx = wallet.sendData(tips, metadata);
+    const result = this.dag.addTransaction(tx);
+    if (!result.success) throw new Error(result.error);
+
+    this._indexDislike(tx);
+    return { txId: tx.id, disliked: !alreadyDisliked };
   }
 
   // ============================================================
@@ -278,10 +318,10 @@ export class Social {
   }
 
   /** Get a post with comment and like counts */
-  getPost(postId) {
+  getPost(postId, viewerAddress) {
     const post = this.posts.get(postId);
     if (!post) return null;
-    return this._enrichPost(post);
+    return this._enrichPost(post, viewerAddress);
   }
 
   /** Get feed of posts from followed users, newest first */
@@ -297,17 +337,23 @@ export class Social {
       }
     }
 
+    // Also include own posts in feed
+    const ownPosts = this.postsByAuthor.get(address) || [];
+    for (const p of ownPosts) {
+      if (!p.forumId) posts.push(p);
+    }
+
     posts.sort((a, b) => b.createdAt - a.createdAt);
-    return { posts: posts.slice(offset, offset + limit).map(p => this._enrichPost(p)) };
+    return { posts: posts.slice(offset, offset + limit).map(p => this._enrichPost(p, address)) };
   }
 
   /** Get global feed (all non-forum posts), newest first */
-  getGlobalFeed({ limit = 20, offset = 0 } = {}) {
+  getGlobalFeed({ limit = 20, offset = 0, viewerAddress } = {}) {
     const posts = [...this.posts.values()]
       .filter(p => !p.forumId)
       .sort((a, b) => b.createdAt - a.createdAt);
 
-    return { posts: posts.slice(offset, offset + limit).map(p => this._enrichPost(p)) };
+    return { posts: posts.slice(offset, offset + limit).map(p => this._enrichPost(p, viewerAddress)) };
   }
 
   /** Get comments for a post with author profiles */
@@ -346,19 +392,19 @@ export class Social {
   }
 
   /** Get posts in a forum, newest first */
-  getForumPosts(forumId, { limit = 20, offset = 0 } = {}) {
+  getForumPosts(forumId, { limit = 20, offset = 0, viewerAddress } = {}) {
     const posts = (this.postsByForum.get(forumId) || [])
       .sort((a, b) => b.createdAt - a.createdAt);
 
-    return { posts: posts.slice(offset, offset + limit).map(p => this._enrichPost(p)) };
+    return { posts: posts.slice(offset, offset + limit).map(p => this._enrichPost(p, viewerAddress)) };
   }
 
   /** Get posts by a specific user, newest first */
-  getUserPosts(address, { limit = 20, offset = 0 } = {}) {
+  getUserPosts(address, { limit = 20, offset = 0, viewerAddress } = {}) {
     const posts = (this.postsByAuthor.get(address) || [])
       .sort((a, b) => b.createdAt - a.createdAt);
 
-    return { posts: posts.slice(offset, offset + limit).map(p => this._enrichPost(p)) };
+    return { posts: posts.slice(offset, offset + limit).map(p => this._enrichPost(p, viewerAddress)) };
   }
 
   /** Get social network stats */
@@ -378,14 +424,19 @@ export class Social {
   // HELPERS
   // ============================================================
 
-  /** Enrich a post with author profile, comment count, like count, forum name */
-  _enrichPost(post) {
+  /** Enrich a post with author profile, comment count, like/dislike counts, forum name */
+  _enrichPost(post, viewerAddress) {
     const forum = post.forumId ? this.forums.get(post.forumId) : null;
+    const likeSet = this.likes.get(post.postId) || new Set();
+    const dislikeSet = this.dislikes.get(post.postId) || new Set();
     return {
       ...post,
       authorProfile: this.profiles.get(post.author) || null,
       commentCount: (this.comments.get(post.postId) || []).length,
-      likeCount: (this.likes.get(post.postId) || new Set()).size,
+      likeCount: likeSet.size,
+      dislikeCount: dislikeSet.size,
+      likedByMe: viewerAddress ? likeSet.has(viewerAddress) : false,
+      dislikedByMe: viewerAddress ? dislikeSet.has(viewerAddress) : false,
       forumName: forum?.name || null,
     };
   }
@@ -405,6 +456,7 @@ export class Social {
     this.followers.clear();
     this.forums.clear();
     this.likes.clear();
+    this.dislikes.clear();
 
     const txs = [...this.dag.transactions.values()]
       .filter(tx => tx.metadata?._social)
@@ -419,6 +471,7 @@ export class Social {
         case 'follow': this._indexFollow(tx); break;
         case 'forum': this._indexForum(tx); break;
         case 'like': this._indexLike(tx); break;
+        case 'dislike': this._indexDislike(tx); break;
       }
     }
 
@@ -524,8 +577,24 @@ export class Social {
 
     if (m.action === 'like') {
       this.likes.get(m.postId).add(addr);
+      // Remove dislike if present
+      if (this.dislikes.has(m.postId)) this.dislikes.get(m.postId).delete(addr);
     } else {
       this.likes.get(m.postId).delete(addr);
+    }
+  }
+
+  _indexDislike(tx) {
+    const m = tx.metadata;
+    const addr = m.author || tx.from;
+    if (!this.dislikes.has(m.postId)) this.dislikes.set(m.postId, new Set());
+
+    if (m.action === 'dislike') {
+      this.dislikes.get(m.postId).add(addr);
+      // Remove like if present
+      if (this.likes.has(m.postId)) this.likes.get(m.postId).delete(addr);
+    } else {
+      this.dislikes.get(m.postId).delete(addr);
     }
   }
 
