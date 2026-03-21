@@ -63,6 +63,29 @@ label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
 .login-box p{color:var(--muted);margin-bottom:24px}
 .form-group{margin-bottom:14px;text-align:left}
 @media(max-width:768px){.form-row{flex-direction:column}.order-row{flex-direction:column;gap:8px;text-align:center}}
+/* HOW IT WORKS */
+.how-section{max-width:900px;margin:0 auto 40px;padding:0 20px}
+.how-section h2{font-size:24px;margin-bottom:20px;text-align:center;background:linear-gradient(135deg,var(--accent),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.how-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px}
+@media(max-width:768px){.how-grid{grid-template-columns:1fr}}
+.how-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px}
+.how-card h3{font-size:16px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.how-card .step-num{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;font-size:13px;font-weight:bold;flex-shrink:0}
+.how-card ul{list-style:none;padding:0;margin:0}
+.how-card li{padding:6px 0;font-size:13px;color:var(--muted);border-bottom:1px solid var(--border)}
+.how-card li:last-child{border-bottom:none}
+.how-card li strong{color:var(--text)}
+.how-highlight{background:var(--card);border:2px solid var(--green);border-radius:12px;padding:20px;margin-bottom:28px}
+.how-highlight h3{color:var(--green);font-size:17px;margin-bottom:10px}
+.how-highlight p{font-size:14px;color:var(--muted);margin-bottom:6px}
+.how-highlight .compat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:14px}
+.how-highlight .compat-item{background:var(--bg2);border-radius:8px;padding:10px 14px;text-align:center;font-size:13px;font-weight:bold;color:var(--green)}
+.how-faq{margin-bottom:24px}
+.how-faq details{background:var(--card);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden}
+.how-faq summary{padding:14px 18px;cursor:pointer;font-size:14px;font-weight:600;color:var(--text);list-style:none;display:flex;justify-content:space-between;align-items:center}
+.how-faq summary::after{content:'+';color:var(--accent);font-size:18px;font-weight:bold}
+.how-faq details[open] summary::after{content:'-'}
+.how-faq .faq-body{padding:0 18px 14px;font-size:13px;color:var(--muted);line-height:1.7}
 </style>
 </head>
 <body>
@@ -82,8 +105,122 @@ label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
   </div>
 </nav>
 
+<!-- HOW IT WORKS -->
+<div id="how-it-works" class="how-section" style="margin-top:76px">
+  <h2>How does the IOTAI P2P Exchange work?</h2>
+  <p style="text-align:center;color:var(--muted);margin-bottom:28px;font-size:15px">
+    Trade your IOTAI tokens for <strong style="color:var(--green)">USDT (Tether)</strong> on the <strong style="color:var(--accent)">Tron network (TRC-20)</strong> in a secure, peer-to-peer way with escrow protection.
+  </p>
+
+  <!-- STEPS FOR SELLERS -->
+  <div class="how-grid">
+    <div class="how-card">
+      <h3><span class="step-num" style="background:var(--accent);color:white">S</span> If you want to SELL IOTAI</h3>
+      <ul>
+        <li><strong>Step 1:</strong> Login with your IOTAI wallet (seed phrase)</li>
+        <li><strong>Step 2:</strong> Register your Tron wallet address where you will <strong style="color:var(--green)">receive USDT</strong></li>
+        <li><strong>Step 3:</strong> Go to "Sell IOTAI" tab, set the amount and price per IOTAI</li>
+        <li><strong>Step 4:</strong> Your IOTAI is <strong style="color:var(--yellow)">locked in escrow</strong> automatically (safe and secure)</li>
+        <li><strong>Step 5:</strong> Wait for a buyer. When they pay, the system verifies the transaction automatically</li>
+        <li><strong>Step 6:</strong> If auto-verification fails, you can <strong>manually confirm</strong> that you received the USDT</li>
+        <li><strong>Step 7:</strong> Once confirmed, the IOTAI is released to the buyer. Done!</li>
+      </ul>
+    </div>
+
+    <div class="how-card">
+      <h3><span class="step-num" style="background:var(--green);color:white">B</span> If you want to BUY IOTAI</h3>
+      <ul>
+        <li><strong>Step 1:</strong> Login with your IOTAI wallet (seed phrase)</li>
+        <li><strong>Step 2:</strong> Register your Tron wallet address (where you send USDT from)</li>
+        <li><strong>Step 3:</strong> Browse the "Market" tab and find an order you like</li>
+        <li><strong>Step 4:</strong> Click <strong style="color:var(--green)">"Buy"</strong> — the system gives you payment instructions: amount, destination wallet, and a <strong style="color:var(--accent)">memo code</strong></li>
+        <li><strong>Step 5:</strong> Send the USDT to the seller's Tron address (you have <strong style="color:var(--orange)">2 hours</strong> to complete)</li>
+        <li><strong>Step 6:</strong> After sending, paste the <strong>Tron transaction hash (TX ID)</strong> and confirm</li>
+        <li><strong>Step 7:</strong> The system verifies your payment on the Tron blockchain and releases your IOTAI instantly!</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- EXCHANGE COMPATIBILITY -->
+  <div class="how-highlight">
+    <h3>You CAN send USDT from any exchange or wallet!</h3>
+    <p>
+      It <strong style="color:var(--text)">doesn't matter</strong> if you send the USDT from a centralized exchange like Binance, KuCoin, Bybit, OKX, or any other platform.
+      Our system <strong style="color:var(--text)">does NOT verify the sender address</strong> — it only verifies that the <strong style="color:var(--green)">correct amount arrived</strong> at the <strong style="color:var(--green)">seller's wallet</strong> on the Tron blockchain.
+    </p>
+    <p>
+      This means you can withdraw USDT from your exchange account directly to the seller's address. Just make sure you select the <strong style="color:var(--accent)">TRC-20 network</strong> when withdrawing.
+    </p>
+    <div class="compat-grid">
+      <div class="compat-item">Binance</div>
+      <div class="compat-item">KuCoin</div>
+      <div class="compat-item">Bybit</div>
+      <div class="compat-item">OKX</div>
+      <div class="compat-item">TronLink</div>
+      <div class="compat-item">Trust Wallet</div>
+      <div class="compat-item">Ledger</div>
+      <div class="compat-item">Any TRC-20 Wallet</div>
+    </div>
+  </div>
+
+  <!-- FAQ -->
+  <div class="how-faq">
+    <details>
+      <summary>What is escrow and how does it protect me?</summary>
+      <div class="faq-body">
+        When a seller creates an order, their IOTAI tokens are <strong>locked in an escrow address</strong> on the IOTAI DAG. This means the seller cannot spend those tokens while the order is active. The IOTAI is only released to the buyer after the USDT payment is verified, or returned to the seller if the order is cancelled or expires. This protects both parties.
+      </div>
+    </details>
+    <details>
+      <summary>How is the USDT payment verified?</summary>
+      <div class="faq-body">
+        When the buyer submits their Tron TX hash, our system queries the <strong>TronGrid API</strong> to verify the transaction on the Tron blockchain. It checks that:<br>
+        &bull; The transaction was <strong>successful</strong><br>
+        &bull; It involves the <strong>official USDT (TRC-20) contract</strong><br>
+        &bull; The <strong>destination address</strong> matches the seller's registered Tron wallet<br>
+        &bull; The <strong>amount</strong> is correct (with 1% tolerance for network fees)<br><br>
+        If automatic verification fails for any reason, the order goes to "pending verification" status and the <strong>seller can manually confirm</strong> that they received the USDT.
+      </div>
+    </details>
+    <details>
+      <summary>Why do I need a Tron wallet address?</summary>
+      <div class="faq-body">
+        USDT (Tether) runs on multiple blockchains. In this exchange, we use the <strong>Tron network (TRC-20)</strong> because it has the lowest transfer fees (usually less than $1). You need a Tron-compatible wallet address to send or receive USDT. You can get one from TronLink, Trust Wallet, or use the deposit address from your exchange (Binance, KuCoin, etc.).
+      </div>
+    </details>
+    <details>
+      <summary>What happens if I don't pay in time?</summary>
+      <div class="faq-body">
+        After claiming an order, you have <strong>2 hours</strong> to complete the USDT transfer and submit the TX hash. If you don't complete the payment in time, the order returns to "open" status and becomes available for other buyers. The seller's IOTAI remains safely in escrow. Orders themselves expire after <strong>24 hours</strong> if no one claims them, and the IOTAI is returned to the seller.
+      </div>
+    </details>
+    <details>
+      <summary>Can I send USDT from Binance or another exchange?</summary>
+      <div class="faq-body">
+        <strong style="color:var(--green)">Yes, absolutely!</strong> You can send USDT from any exchange (Binance, KuCoin, Bybit, OKX, etc.) or any personal wallet. Exchanges use internal pool wallets, so the on-chain sender address will be different from your account — but our system <strong>doesn't check the sender</strong>, only the destination and amount. Just make sure to:<br><br>
+        &bull; Select <strong>TRC-20 (Tron)</strong> as the withdrawal network<br>
+        &bull; Paste the <strong>seller's Tron address</strong> as the destination<br>
+        &bull; Send the <strong>exact amount</strong> shown in the instructions<br>
+        &bull; Copy the <strong>TX hash</strong> from your withdrawal history and paste it in the confirmation
+      </div>
+    </details>
+    <details>
+      <summary>What is the minimum price per IOTAI?</summary>
+      <div class="faq-body">
+        The minimum price is <strong>$0.10 USDT per IOTAI</strong>. Sellers can set any price equal to or above this minimum.
+      </div>
+    </details>
+  </div>
+
+  <div style="text-align:center">
+    <button class="btn btn-primary" style="padding:14px 40px;font-size:16px" onclick="document.getElementById('how-it-works').style.display='none';document.getElementById('login-panel').style.display='block'">
+      Start Trading
+    </button>
+  </div>
+</div>
+
 <!-- LOGIN -->
-<div id="login-panel" class="login-box">
+<div id="login-panel" class="login-box" style="display:none">
   <h2>IOTAI Exchange</h2>
   <p>Buy and sell IOTAI for USDT (TRC-20, Tron network).<br>Login with your IOTAI wallet to start trading.</p>
   <div class="form-group">
@@ -134,6 +271,7 @@ label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
     <div class="tab active" onclick="showTab('market')">Market</div>
     <div class="tab" onclick="showTab('sell')">Sell IOTAI</div>
     <div class="tab" onclick="showTab('myorders')">My Orders</div>
+    <div class="tab" onclick="showTab('guide')">How it Works</div>
   </div>
 
   <!-- MARKET TAB -->
@@ -176,6 +314,38 @@ label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
     <h3 style="font-size:18px;margin-bottom:16px">My Orders</h3>
     <div id="my-orders-list">
       <p style="color:var(--muted);text-align:center;padding:40px">Loading...</p>
+    </div>
+  </div>
+
+  <!-- GUIDE TAB -->
+  <div id="guide-panel" class="panel">
+    <div class="how-card" style="margin-bottom:20px">
+      <h3 style="color:var(--accent);font-size:18px;margin-bottom:14px">How to sell IOTAI</h3>
+      <ul>
+        <li><strong>1.</strong> Register your <strong style="color:var(--green)">Tron wallet</strong> address (where you receive USDT)</li>
+        <li><strong>2.</strong> Go to <strong>"Sell IOTAI"</strong> tab, set amount and price</li>
+        <li><strong>3.</strong> Your IOTAI is <strong style="color:var(--yellow)">locked in escrow</strong> (safe and secure)</li>
+        <li><strong>4.</strong> A buyer claims your order and sends USDT to your Tron wallet</li>
+        <li><strong>5.</strong> The system auto-verifies on the Tron blockchain, or you confirm manually</li>
+        <li><strong>6.</strong> IOTAI is released to the buyer. You keep the USDT!</li>
+      </ul>
+    </div>
+    <div class="how-card" style="margin-bottom:20px">
+      <h3 style="color:var(--green);font-size:18px;margin-bottom:14px">How to buy IOTAI</h3>
+      <ul>
+        <li><strong>1.</strong> Browse open orders in the <strong>"Market"</strong> tab</li>
+        <li><strong>2.</strong> Click <strong style="color:var(--green)">"Buy"</strong> on the order you want</li>
+        <li><strong>3.</strong> You receive payment instructions: <strong style="color:var(--yellow)">amount, wallet address, and memo code</strong></li>
+        <li><strong>4.</strong> Send USDT (TRC-20) to the seller's Tron address. <strong style="color:var(--orange)">You have 2 hours</strong></li>
+        <li><strong>5.</strong> Paste the <strong>Tron TX hash</strong> from your withdrawal/transfer history</li>
+        <li><strong>6.</strong> System verifies the payment and releases your IOTAI instantly!</li>
+      </ul>
+    </div>
+    <div class="how-highlight">
+      <h3>Works from ANY exchange or wallet!</h3>
+      <p>You can send USDT from <strong style="color:var(--text)">Binance, KuCoin, Bybit, OKX, TronLink, Trust Wallet, Ledger</strong>, or any other TRC-20 compatible wallet.</p>
+      <p>Our system <strong style="color:var(--text)">does NOT check the sender address</strong> — only verifies that the correct amount arrived at the seller's wallet. Exchanges use pool wallets internally, but this is not a problem.</p>
+      <p style="margin-top:10px;color:var(--orange)"><strong>Important:</strong> Always select <strong>TRC-20 (Tron)</strong> as the network when withdrawing USDT from your exchange.</p>
     </div>
   </div>
 
@@ -252,11 +422,13 @@ function logout() {
   localStorage.removeItem('iotai_exchange_address');
   localStorage.removeItem('iotai_exchange_seed');
   document.getElementById('app').style.display = 'none';
-  document.getElementById('login-panel').style.display = 'block';
+  document.getElementById('how-it-works').style.display = 'block';
+  document.getElementById('login-panel').style.display = 'none';
   document.getElementById('nav-user').style.display = 'none';
 }
 
 async function enterApp() {
+  document.getElementById('how-it-works').style.display = 'none';
   document.getElementById('login-panel').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   document.getElementById('nav-addr').textContent = shortAddr(state.address);
@@ -306,7 +478,7 @@ function showTab(name) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById(name + '-panel').classList.add('active');
-  document.querySelectorAll('.tab')[['market','sell','myorders'].indexOf(name)].classList.add('active');
+  document.querySelectorAll('.tab')[['market','sell','myorders','guide'].indexOf(name)].classList.add('active');
   document.getElementById('order-detail').classList.add('hidden');
 
   if (name === 'market') loadMarket();
