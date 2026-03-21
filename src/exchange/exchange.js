@@ -1,18 +1,18 @@
 /**
  * IOTAI P2P Exchange
  *
- * Sell IOTAI for USDC (TRC-20 on Tron network).
+ * Sell IOTAI for USDT (TRC-20 on Tron network).
  * - Sellers create sell orders, IOTAI goes to escrow
- * - Buyers claim orders, transfer USDC, confirm payment
+ * - Buyers claim orders, transfer USDT, confirm payment
  * - Platform verifies Tron transaction via TronGrid API
  * - On verification, IOTAI released to buyer
  *
- * USDC Contract (Tron): TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8
+ * USDT Contract (Tron): TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t
  */
 
-const USDC_CONTRACT = 'TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8';
+const USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 const TRONGRID_API = 'https://api.trongrid.io';
-const MIN_PRICE_PER_IOTAI = 0.1; // minimum 0.1 USDC per IOTAI
+const MIN_PRICE_PER_IOTAI = 0.1; // minimum 0.1 USDT per IOTAI
 const ESCROW_PREFIX = 'iotai_exchange_';
 const ORDER_EXPIRY = 24 * 60 * 60 * 1000; // 24h
 const PAYMENT_TIMEOUT = 2 * 60 * 60 * 1000; // 2h to pay after claiming
@@ -30,7 +30,7 @@ export class Exchange {
   }
 
   // ============================================================
-  // USDC WALLET REGISTRATION
+  // USDT WALLET REGISTRATION
   // ============================================================
 
   registerUsdcWallet(wallet, tips, { tronAddress }) {
@@ -65,11 +65,11 @@ export class Exchange {
   createOrder(wallet, tips, { amountIotai, pricePerIotai }) {
     if (!amountIotai || amountIotai <= 0) throw new Error('Amount must be positive');
     if (!pricePerIotai || pricePerIotai < MIN_PRICE_PER_IOTAI) {
-      throw new Error(`Minimum price is ${MIN_PRICE_PER_IOTAI} USDC per IOTAI`);
+      throw new Error(`Minimum price is ${MIN_PRICE_PER_IOTAI} USDT per IOTAI`);
     }
 
     const sellerTron = this.usdcWallets.get(wallet.address);
-    if (!sellerTron) throw new Error('Register your USDC wallet first');
+    if (!sellerTron) throw new Error('Register your USDT wallet first');
 
     // Check seller balance
     const balance = this.dag.getBalance(wallet.address);
@@ -152,7 +152,7 @@ export class Exchange {
     if (order.seller === wallet.address) throw new Error('Cannot buy your own order');
 
     const buyerTron = this.usdcWallets.get(wallet.address);
-    if (!buyerTron) throw new Error('Register your USDC wallet first');
+    if (!buyerTron) throw new Error('Register your USDT wallet first');
 
     // Check if order expired
     if (Date.now() > order.expiresAt) {
@@ -191,7 +191,7 @@ export class Exchange {
       totalUsdc: order.totalUsdc,
       amountIotai: order.amountIotai,
       paymentDeadline: order.paymentDeadline,
-      instructions: `Transfer ${order.totalUsdc} USDC (TRC-20) to ${order.sellerTron}. Use memo: ${memoCode}`,
+      instructions: `Transfer ${order.totalUsdc} USDT (TRC-20) to ${order.sellerTron}. Use memo: ${memoCode}`,
     };
   }
 
@@ -298,16 +298,16 @@ export class Exchange {
       // Check if confirmed
       if (txInfo.ret?.[0]?.contractRet !== 'SUCCESS') return false;
 
-      // For TRC-20 USDC, check internal transactions
+      // For TRC-20 USDT, check internal transactions
       const res2 = await fetch(`${TRONGRID_API}/v1/transactions/${txHash}/events`);
       if (!res2.ok) return false;
 
       const events = await res2.json();
       if (!events?.data) return false;
 
-      // Look for Transfer event from USDC contract
+      // Look for Transfer event from USDT contract
       for (const event of events.data) {
-        if (event.contract_address !== USDC_CONTRACT) continue;
+        if (event.contract_address !== USDT_CONTRACT) continue;
         if (event.event_name !== 'Transfer') continue;
 
         const toAddr = event.result?.to || event.result?.['1'];
@@ -315,7 +315,7 @@ export class Exchange {
 
         if (!toAddr || !amount) continue;
 
-        // Convert amount (USDC has 6 decimals on Tron)
+        // Convert amount (USDT has 6 decimals on Tron)
         const usdcAmount = parseInt(amount) / 1_000_000;
 
         // Allow 1% tolerance for fees

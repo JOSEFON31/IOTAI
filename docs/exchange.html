@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>IOTAI Exchange - Buy & Sell IOTAI for USDC</title>
+<title>IOTAI Exchange - Buy & Sell IOTAI for USDT</title>
 <style>
 :root{--bg:#0a0a1a;--bg2:#111133;--card:#1a1a3e;--border:#2a2a5e;--text:#e0e0f0;--muted:#888;--accent:#6C5CE7;--green:#00B894;--orange:#E17055;--blue:#0984E3;--yellow:#FDCB6E;--red:#d63031}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -85,7 +85,7 @@ label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
 <!-- LOGIN -->
 <div id="login-panel" class="login-box">
   <h2>IOTAI Exchange</h2>
-  <p>Buy and sell IOTAI for USDC (TRC-20, Tron network).<br>Login with your IOTAI wallet to start trading.</p>
+  <p>Buy and sell IOTAI for USDT (TRC-20, Tron network).<br>Login with your IOTAI wallet to start trading.</p>
   <div class="form-group">
     <label>Seed phrase or passphrase</label>
     <input type="password" id="login-seed" placeholder="Enter your 12-word seed phrase or passphrase">
@@ -102,8 +102,8 @@ label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
 
   <!-- WALLET SETUP BANNER -->
   <div id="wallet-setup" class="card hidden" style="border-color:var(--yellow)">
-    <h3 style="color:var(--yellow);margin-bottom:8px">Register Your USDC Wallet (Tron TRC-20)</h3>
-    <p style="color:var(--muted);font-size:13px;margin-bottom:12px">To trade, you need to register your Tron wallet address where you receive/send USDC.</p>
+    <h3 style="color:var(--yellow);margin-bottom:8px">Register Your USDT Wallet (Tron TRC-20)</h3>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:12px">To trade, you need to register your Tron wallet address where you receive/send USDT.</p>
     <div class="form-row">
       <div>
         <label>Your Tron Address (starts with T)</label>
@@ -119,7 +119,7 @@ label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
   <div id="wallet-info" class="card hidden" style="border-color:var(--green)">
     <div style="display:flex;justify-content:space-between;align-items:center">
       <div>
-        <span style="font-size:12px;color:var(--muted)">Your USDC Wallet (Tron TRC-20)</span>
+        <span style="font-size:12px;color:var(--muted)">Your USDT Wallet (Tron TRC-20)</span>
         <div class="mono" id="my-tron-addr" style="color:var(--green)"></div>
       </div>
       <div>
@@ -154,14 +154,14 @@ label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
           <input type="number" id="sell-amount" placeholder="100" min="1" step="1" oninput="calcTotal()">
         </div>
         <div>
-          <label>Price per IOTAI (USDC)</label>
+          <label>Price per IOTAI (USDT)</label>
           <input type="number" id="sell-price" placeholder="0.10" min="0.10" step="0.01" value="0.10" oninput="calcTotal()">
         </div>
       </div>
       <div class="info-box">
         <div style="display:flex;justify-content:space-between">
           <span>Total buyer pays:</span>
-          <strong id="sell-total">0.00 USDC</strong>
+          <strong id="sell-total">0.00 USDT</strong>
         </div>
         <div style="display:flex;justify-content:space-between;margin-top:4px">
           <span>Your IOTAI will be locked in escrow until sold or cancelled.</span>
@@ -262,7 +262,7 @@ async function enterApp() {
   document.getElementById('nav-addr').textContent = shortAddr(state.address);
   document.getElementById('nav-user').style.display = 'inline';
 
-  // Check USDC wallet
+  // Check USDT wallet
   try {
     const w = await api('GET', '/api/v1/exchange/my-wallet');
     if (w.tronAddress) {
@@ -297,7 +297,7 @@ async function registerWallet() {
     document.getElementById('wallet-setup').classList.add('hidden');
     document.getElementById('wallet-info').classList.remove('hidden');
     document.getElementById('my-tron-addr').textContent = tronAddress;
-    toast('USDC wallet registered!');
+    toast('USDT wallet registered!');
   } catch (e) { toast(e.message, true); }
 }
 
@@ -320,7 +320,7 @@ async function loadStats() {
     document.getElementById('stats-grid').innerHTML = `
       <div class="stat-card"><div class="num">${s.openOrders}</div><div class="lbl">Open Orders</div></div>
       <div class="stat-card"><div class="num">${s.completedTrades}</div><div class="lbl">Completed Trades</div></div>
-      <div class="stat-card"><div class="num">$${s.totalVolumeUsdc}</div><div class="lbl">Volume (USDC)</div></div>
+      <div class="stat-card"><div class="num">$${s.totalVolumeUsdc}</div><div class="lbl">Volume (USDT)</div></div>
       <div class="stat-card"><div class="num">${s.avgPriceUsdc > 0 ? '$' + s.avgPriceUsdc : '-'}</div><div class="lbl">Avg Price</div></div>
     `;
   } catch {}
@@ -340,7 +340,7 @@ async function loadMarket() {
         <span style="flex:1">Seller</span>
         <span style="flex:1;text-align:center">Amount</span>
         <span style="flex:1;text-align:center">Price/IOTAI</span>
-        <span style="flex:1;text-align:center">Total USDC</span>
+        <span style="flex:1;text-align:center">Total USDT</span>
         <span style="flex:1;text-align:right">Action</span>
       </div>
       ${orders.map(o => `
@@ -363,7 +363,7 @@ function calcTotal() {
   const amount = parseFloat(document.getElementById('sell-amount').value) || 0;
   const price = parseFloat(document.getElementById('sell-price').value) || 0;
   const total = Math.round(amount * price * 100) / 100;
-  document.getElementById('sell-total').textContent = total.toFixed(2) + ' USDC';
+  document.getElementById('sell-total').textContent = total.toFixed(2) + ' USDT';
 }
 
 async function createSellOrder() {
@@ -371,10 +371,10 @@ async function createSellOrder() {
   const pricePerIotai = parseFloat(document.getElementById('sell-price').value);
   if (!amountIotai || amountIotai <= 0) return toast('Enter amount', true);
   if (!pricePerIotai || pricePerIotai < 0.10) return toast('Minimum price is $0.10 per IOTAI', true);
-  if (!state.tronAddress) return toast('Register your USDC wallet first', true);
+  if (!state.tronAddress) return toast('Register your USDT wallet first', true);
   try {
     const result = await api('POST', '/api/v1/exchange/create-order', { amountIotai, pricePerIotai });
-    toast(`Order created! Selling ${result.amountIotai} IOTAI for $${result.totalUsdc} USDC`);
+    toast(`Order created! Selling ${result.amountIotai} IOTAI for $${result.totalUsdc} USDT`);
     document.getElementById('sell-amount').value = '';
     calcTotal();
     showTab('myorders');
@@ -385,7 +385,7 @@ async function createSellOrder() {
 
 // ---- BUY FLOW ----
 async function buyOrder(orderId) {
-  if (!state.tronAddress) return toast('Register your USDC wallet first', true);
+  if (!state.tronAddress) return toast('Register your USDT wallet first', true);
   try {
     const result = await api('POST', '/api/v1/exchange/claim-order', { orderId });
     // Show payment instructions
@@ -395,9 +395,9 @@ async function buyOrder(orderId) {
     document.getElementById('detail-title').textContent = 'Complete Your Purchase';
     document.getElementById('detail-content').innerHTML = `
       <div class="info-box" style="border-color:var(--yellow)">
-        <h4 style="color:var(--yellow);margin-bottom:8px">Transfer USDC to complete this purchase</h4>
+        <h4 style="color:var(--yellow);margin-bottom:8px">Transfer USDT to complete this purchase</h4>
         <table style="width:100%;font-size:14px;border-collapse:collapse">
-          <tr><td style="padding:6px 0;color:var(--muted)">Amount:</td><td style="font-weight:bold;color:var(--green)">$${result.totalUsdc} USDC</td></tr>
+          <tr><td style="padding:6px 0;color:var(--muted)">Amount:</td><td style="font-weight:bold;color:var(--green)">$${result.totalUsdc} USDT</td></tr>
           <tr><td style="padding:6px 0;color:var(--muted)">Network:</td><td style="font-weight:bold">Tron (TRC-20)</td></tr>
           <tr><td style="padding:6px 0;color:var(--muted)">Send to:</td><td class="mono" style="color:var(--yellow);word-break:break-all">${result.payTo}</td></tr>
           <tr><td style="padding:6px 0;color:var(--muted)">Memo:</td><td class="mono" style="color:var(--accent);font-size:16px;font-weight:bold">${result.memoCode}</td></tr>
@@ -407,10 +407,10 @@ async function buyOrder(orderId) {
       <p style="color:var(--orange);font-size:13px;margin:12px 0">You have 2 hours to complete the transfer. After that, the order will be released back to the seller.</p>
       <div class="form-group" style="margin-top:16px">
         <label>Tron Transaction Hash (after you transfer)</label>
-        <input type="text" id="confirm-txhash" placeholder="Enter the Tron TX hash after you send USDC">
+        <input type="text" id="confirm-txhash" placeholder="Enter the Tron TX hash after you send USDT">
       </div>
       <button class="btn btn-green" style="width:100%;margin-top:8px;padding:14px;font-size:16px" onclick="confirmPayment('${orderId}')">
-        I Already Transferred USDC
+        I Already Transferred USDT
       </button>
     `;
   } catch (e) { toast(e.message, true); }
@@ -468,7 +468,7 @@ async function loadMyOrders() {
         actions = `<button class="btn btn-danger btn-small" onclick="cancelOrder('${o.orderId}')">Cancel</button>`;
       }
       if (isSeller && (o.status === 'pending_verification' || o.status === 'claimed') && o.buyer) {
-        actions = `<button class="btn btn-green btn-small" onclick="sellerConfirm('${o.orderId}')">Confirm USDC Received</button>`;
+        actions = `<button class="btn btn-green btn-small" onclick="sellerConfirm('${o.orderId}')">Confirm USDT Received</button>`;
       }
       if (isBuyer && o.status === 'claimed') {
         actions = `<button class="btn btn-green btn-small" onclick="buyOrder('${o.orderId}')">Complete Payment</button>`;
@@ -482,7 +482,7 @@ async function loadMyOrders() {
         <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:14px">
           <div><span style="color:var(--muted)">Amount:</span> <strong style="color:var(--accent)">${o.amountIotai} IOTAI</strong></div>
           <div><span style="color:var(--muted)">Price:</span> <strong style="color:var(--green)">$${o.pricePerIotai}/IOTAI</strong></div>
-          <div><span style="color:var(--muted)">Total:</span> <strong style="color:var(--yellow)">$${o.totalUsdc} USDC</strong></div>
+          <div><span style="color:var(--muted)">Total:</span> <strong style="color:var(--yellow)">$${o.totalUsdc} USDT</strong></div>
           <div><span style="color:var(--muted)">Role:</span> <strong>${isSeller ? 'Seller' : 'Buyer'}</strong></div>
         </div>
         ${o.memoCode ? `<div style="font-size:12px;margin-top:6px;color:var(--muted)">Memo: <span class="mono" style="color:var(--accent)">${o.memoCode}</span></div>` : ''}
@@ -507,7 +507,7 @@ async function cancelOrder(orderId) {
 }
 
 async function sellerConfirm(orderId) {
-  if (!confirm('Confirm that you received the USDC payment? This will release the IOTAI to the buyer.')) return;
+  if (!confirm('Confirm that you received the USDT payment? This will release the IOTAI to the buyer.')) return;
   try {
     const result = await api('POST', '/api/v1/exchange/seller-confirm', { orderId });
     toast('IOTAI released to buyer. Trade complete!');
