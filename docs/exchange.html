@@ -11,18 +11,19 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 a{color:var(--accent);text-decoration:none;cursor:pointer}
 a:hover{text-decoration:underline}
 nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,10,26,0.97);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px}
-nav .logo{font-size:22px;font-weight:bold;white-space:nowrap;background:linear-gradient(135deg,var(--accent),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-decoration:none}
-nav .links{display:flex;gap:6px;align-items:center}
-nav .links a{color:var(--muted);font-size:13px;padding:4px 8px;border-radius:6px;white-space:nowrap;transition:all .2s}
+nav .logo{font-size:22px;font-weight:bold;white-space:nowrap;background:linear-gradient(135deg,var(--accent),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-decoration:none;flex-shrink:0}
+nav .links{display:flex;gap:2px;align-items:center;overflow-x:auto;-ms-overflow-style:none;scrollbar-width:none}
+nav .links::-webkit-scrollbar{display:none}
+nav .links a{color:var(--muted);font-size:12px;padding:6px 10px;border-radius:6px;white-space:nowrap;transition:all .2s}
 nav .links a:hover{color:var(--text);text-decoration:none;background:rgba(108,92,231,0.1)}
 nav .links .nav-active{color:var(--text);font-weight:600}
-.hamburger{display:none;background:none;border:none;cursor:pointer;padding:8px;color:var(--text);font-size:24px}
-.nav-user{display:flex;align-items:center;gap:8px;font-size:12px}
+.hamburger{display:none;background:none;border:none;cursor:pointer;padding:8px;color:var(--text);font-size:24px;flex-shrink:0}
+.nav-user{display:flex;align-items:center;gap:8px;font-size:12px;white-space:nowrap}
 .nav-user .nav-addr{color:var(--green);font-weight:bold}
 .nav-user .nav-logout{color:var(--red);cursor:pointer;font-size:11px}
 @media(max-width:768px){
 .hamburger{display:block}
-nav .links{display:none;position:absolute;top:56px;left:0;right:0;background:rgba(10,10,26,0.98);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);flex-direction:column;padding:12px 16px;gap:2px}
+nav .links{display:none;position:absolute;top:56px;left:0;right:0;background:rgba(10,10,26,0.98);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);flex-direction:column;padding:12px 16px;gap:2px;overflow-x:visible;max-height:80vh;overflow-y:auto}
 nav .links.open{display:flex}
 nav .links a{padding:10px 16px;font-size:14px;width:100%;border-radius:8px}
 nav .links a:hover{background:rgba(108,92,231,0.15)}

@@ -13,15 +13,16 @@ a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 body>.container{padding-top:72px}
 header{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,10,26,0.97);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0;height:56px}
 header .container{display:flex;align-items:center;justify-content:space-between;height:56px;padding:0 24px}
-.logo{font-size:22px;font-weight:700;white-space:nowrap;background:linear-gradient(135deg,var(--accent),#00b894);-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-decoration:none}
-header nav{display:flex;gap:6px;align-items:center}
-header nav a{color:var(--muted);font-size:13px;padding:4px 8px;border-radius:6px;white-space:nowrap;transition:all .2s;margin:0}
+.logo{font-size:22px;font-weight:700;white-space:nowrap;background:linear-gradient(135deg,var(--accent),#00b894);-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-decoration:none;flex-shrink:0}
+header nav{display:flex;gap:2px;align-items:center;overflow-x:auto;-ms-overflow-style:none;scrollbar-width:none}
+header nav::-webkit-scrollbar{display:none}
+header nav a{color:var(--muted);font-size:12px;padding:6px 10px;border-radius:6px;white-space:nowrap;transition:all .2s;margin:0}
 header nav a:hover{color:#fff;text-decoration:none;background:rgba(108,92,231,0.1)}
 header nav .nav-active{color:#fff;font-weight:600}
-.hamburger{display:none;background:none;border:none;cursor:pointer;padding:8px;color:#fff;font-size:24px}
+.hamburger{display:none;background:none;border:none;cursor:pointer;padding:8px;color:#fff;font-size:24px;flex-shrink:0}
 @media(max-width:768px){
 .hamburger{display:block}
-header nav{display:none;position:absolute;top:56px;left:0;right:0;background:rgba(10,10,26,0.98);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);flex-direction:column;padding:12px 16px;gap:2px}
+header nav{display:none;position:absolute;top:56px;left:0;right:0;background:rgba(10,10,26,0.98);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);flex-direction:column;padding:12px 16px;gap:2px;overflow-x:visible;max-height:80vh;overflow-y:auto}
 header nav.open{display:flex}
 header nav a{padding:10px 16px;font-size:14px;width:100%;border-radius:8px}
 header nav a:hover{background:rgba(108,92,231,0.15)}
