@@ -34,6 +34,7 @@ import { BatchProcessor } from './core/batch.js';
 import { EncryptionLayer } from './core/encryption.js';
 import { Social } from './social/social.js';
 import { Exchange } from './exchange/exchange.js';
+import { Agents } from './agents/agents.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DOCS_DIR = resolve(__dirname, '../docs');
@@ -51,6 +52,7 @@ let batchProcessor; // initialized after DAG loads
 let encryption;  // initialized after DAG loads
 let social;      // initialized after DAG loads
 let exchange;    // initialized after DAG loads
+let agents;      // initialized after DAG loads
 const rateLimiter = new RateLimiter();
 const p2p = new P2PSync({
   dag,
@@ -59,6 +61,7 @@ const p2p = new P2PSync({
     // Re-index exchange and social after receiving new transactions from peers
     if (exchange) exchange.resync();
     if (social) social.resync();
+    if (agents) agents.resync();
   },
 });
 
@@ -140,6 +143,9 @@ async function initialize() {
 
   // Initialize P2P exchange
   exchange = new Exchange({ dag });
+
+  // Initialize AI agent marketplace
+  agents = new Agents({ dag });
 }
 
 await initialize();
@@ -165,6 +171,12 @@ setInterval(() => {
     const result = exchange.processExpired();
     if (result.expired > 0 || result.released > 0) {
       console.log(`[Exchange] ${result.expired} expired, ${result.released} payment timeouts`);
+    }
+  }
+  if (agents) {
+    const result = agents.processExpired();
+    if (result.expired > 0) {
+      console.log(`[Agents] ${result.expired} query(s) expired`);
     }
   }
 }, 5 * 60 * 1000);
@@ -542,6 +554,43 @@ async function handleAPI(req, path, body) {
     const order = exchange.getOrder(orderId);
     if (!order) return { status: 404, data: { error: 'Order not found' } };
     return { status: 200, data: order };
+  }
+
+  // ---- AI Agent Marketplace Public Routes ----
+  if (method === 'GET' && path === '/api/v1/agents/stats') {
+    return { status: 200, data: agents.getStats() };
+  }
+  if (method === 'GET' && path === '/api/v1/agents/models') {
+    return { status: 200, data: agents.getAllowedModels() };
+  }
+  if (method === 'GET' && path === '/api/v1/agents/list') {
+    const url = new URL(req.url, `http://localhost:${PORT}`);
+    return { status: 200, data: agents.getAgents({
+      model: url.searchParams.get('model') || undefined,
+      maxPrice: url.searchParams.get('maxPrice') ? parseFloat(url.searchParams.get('maxPrice')) : undefined,
+      minRating: url.searchParams.get('minRating') ? parseFloat(url.searchParams.get('minRating')) : undefined,
+      status: url.searchParams.get('status') || undefined,
+      search: url.searchParams.get('search') || undefined,
+      sortBy: url.searchParams.get('sortBy') || undefined,
+      limit: parseInt(url.searchParams.get('limit') || '50'),
+      offset: parseInt(url.searchParams.get('offset') || '0'),
+    }) };
+  }
+  if (method === 'GET' && path.startsWith('/api/v1/agents/agent/')) {
+    const agentId = path.split('/api/v1/agents/agent/')[1];
+    const agent = agents.getAgent(agentId);
+    if (!agent) return { status: 404, data: { error: 'Agent not found' } };
+    return { status: 200, data: agent };
+  }
+  if (method === 'GET' && path.startsWith('/api/v1/agents/query/')) {
+    const queryId = path.split('/api/v1/agents/query/')[1];
+    const query = agents.getQuery(queryId);
+    if (!query) return { status: 404, data: { error: 'Query not found' } };
+    return { status: 200, data: query };
+  }
+  if (method === 'GET' && path.startsWith('/api/v1/agents/conversation/')) {
+    const convId = path.split('/api/v1/agents/conversation/')[1];
+    return { status: 200, data: agents.getConversation(convId) };
   }
 
   // ---- P2P Sync Routes (public, no auth required) ----
@@ -955,6 +1004,56 @@ async function handleAPI(req, path, body) {
   }
   if (method === 'GET' && path === '/api/v1/exchange/my-orders') {
     return { status: 200, data: exchange.getMyOrders(session.wallet.address) };
+  }
+
+  // ---- AI Agent Marketplace Authenticated Routes ----
+  if (method === 'POST' && path === '/api/v1/agents/register') {
+    try {
+      const tips = dag.selectTips();
+      const result = agents.registerAgent(session.wallet, tips, body);
+      return { status: 201, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/agents/update') {
+    try {
+      const tips = dag.selectTips();
+      const result = agents.updateAgent(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/agents/query') {
+    try {
+      const tips = dag.selectTips();
+      const result = agents.submitQuery(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/agents/respond') {
+    try {
+      const tips = dag.selectTips();
+      const result = agents.submitResponse(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/agents/review') {
+    try {
+      const tips = dag.selectTips();
+      const result = agents.reviewAgent(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'GET' && path === '/api/v1/agents/my/agents') {
+    return { status: 200, data: agents.getAgentsByOwner(session.wallet.address) };
+  }
+  if (method === 'GET' && path === '/api/v1/agents/my/conversations') {
+    return { status: 200, data: agents.getUserConversations(session.wallet.address) };
+  }
+  if (method === 'GET' && path.startsWith('/api/v1/agents/pending/')) {
+    const agentId = path.split('/api/v1/agents/pending/')[1];
+    const agent = agents.getAgent(agentId);
+    if (!agent) return { status: 404, data: { error: 'Agent not found' } };
+    if (agent.owner !== session.wallet.address) return { status: 403, data: { error: 'Not the agent owner' } };
+    return { status: 200, data: agents.getPendingQueries(agentId) };
   }
 
   // ---- Social Network Authenticated Routes ----

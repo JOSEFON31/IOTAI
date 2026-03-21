@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IOTAI AI Agents — Chat Marketplace</title>
+<style>
+:root{--bg:#0a0a1a;--bg2:#111133;--card:#1a1a3e;--border:#2a2a5e;--text:#e0e0f0;--muted:#888;--accent:#6C5CE7;--green:#00B894;--orange:#E17055;--blue:#0984E3;--yellow:#FDCB6E;--red:#d63031}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;line-height:1.6}
+a{color:var(--accent);text-decoration:none;cursor:pointer}
+a:hover{text-decoration:underline}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:var(--bg);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px}
+nav .logo{font-size:22px;font-weight:bold;background:linear-gradient(135deg,var(--accent),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+nav .links{display:flex;gap:16px;align-items:center;font-size:13px}
+nav .links a{color:var(--muted)}
+.btn{display:inline-block;padding:10px 20px;border-radius:8px;border:none;cursor:pointer;font-size:14px;font-weight:600;transition:all .2s}
+.btn-primary{background:var(--accent);color:white}
+.btn-primary:hover{background:#5a4bd1}
+.btn-green{background:var(--green);color:white}
+.btn-orange{background:var(--orange);color:white}
+.btn-small{padding:6px 14px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+input,select,textarea{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:14px;width:100%;font-family:inherit}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent)}
+label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--green);color:var(--green);padding:12px 20px;border-radius:8px;font-size:13px;z-index:999;display:none}
+.toast.error{border-color:var(--red);color:var(--red)}
+.hidden{display:none}
+
+/* LOGIN */
+.login-box{max-width:420px;margin:80px auto;text-align:center;padding:20px}
+.login-box h2{font-size:28px;margin-bottom:8px}
+.login-box p{color:var(--muted);margin-bottom:24px}
+
+/* MAIN LAYOUT */
+.app{display:flex;margin-top:56px;height:calc(100vh - 56px)}
+
+/* SIDEBAR */
+.sidebar{width:320px;border-right:1px solid var(--border);display:flex;flex-direction:column;background:var(--bg)}
+.sidebar-header{padding:16px;border-bottom:1px solid var(--border)}
+.sidebar-header input{margin-bottom:8px}
+.sidebar-filters{display:flex;gap:6px}
+.sidebar-filters select{font-size:12px;padding:6px 8px}
+.agent-list{flex:1;overflow-y:auto;padding:8px}
+.agent-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:8px;cursor:pointer;transition:all .2s}
+.agent-card:hover{border-color:var(--accent)}
+.agent-card.selected{border-color:var(--accent);background:var(--bg2)}
+.agent-name{font-weight:bold;font-size:15px;display:flex;align-items:center;gap:6px}
+.agent-desc{font-size:12px;color:var(--muted);margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.agent-meta{display:flex;gap:12px;margin-top:8px;font-size:11px;color:var(--muted)}
+.agent-meta span{display:flex;align-items:center;gap:3px}
+.model-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:bold;text-transform:uppercase}
+.model-gpt{background:#10a37f22;color:#10a37f}
+.model-claude{background:#d4a57422;color:#d4a574}
+.model-gemini{background:#4285f422;color:#4285f4}
+.model-other{background:#88888822;color:var(--muted)}
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.status-online{background:var(--green)}
+.status-offline{background:var(--red)}
+.rating-stars{color:var(--yellow)}
+
+/* CHAT AREA */
+.chat-area{flex:1;display:flex;flex-direction:column}
+.chat-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg)}
+.chat-header-info{display:flex;align-items:center;gap:12px}
+.chat-header-info h3{font-size:16px}
+.chat-messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:12px}
+.msg-user{align-self:flex-end;max-width:70%;background:var(--accent);color:white;padding:12px 16px;border-radius:16px 16px 4px 16px;font-size:14px}
+.msg-agent{align-self:flex-start;max-width:70%;background:var(--card);border:1px solid var(--border);padding:12px 16px;border-radius:16px 16px 16px 4px;font-size:14px}
+.msg-time{font-size:10px;color:var(--muted);margin-top:4px}
+.msg-pending{align-self:flex-start;max-width:70%;background:var(--card);border:1px solid var(--border);padding:12px 16px;border-radius:16px 16px 16px 4px;font-size:14px;color:var(--muted)}
+.msg-pending .dots{display:inline-block;animation:blink 1.4s infinite}
+@keyframes blink{0%,80%,100%{opacity:0}40%{opacity:1}}
+.chat-input{padding:16px 20px;border-top:1px solid var(--border);background:var(--bg)}
+.chat-input-row{display:flex;gap:10px}
+.chat-input textarea{resize:none;min-height:44px;max-height:120px;flex:1}
+.chat-input-meta{display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--muted)}
+.chat-empty{flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:15px;text-align:center;padding:40px}
+
+/* TABS */
+.tabs{display:flex;gap:0;padding:0 16px;border-bottom:1px solid var(--border)}
+.tab{padding:12px 20px;font-size:13px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* MY AGENTS PANEL */
+.my-agents-panel{padding:20px;overflow-y:auto;flex:1}
+.form-group{margin-bottom:14px}
+.form-row{display:flex;gap:12px}
+.form-row>div{flex:1}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+  .sidebar{width:100%;height:auto;max-height:40vh;border-right:none;border-bottom:1px solid var(--border)}
+  .app{flex-direction:column}
+  .msg-user,.msg-agent,.msg-pending{max-width:85%}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">IOTAI AI Agents</div>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/wallet.html">Wallet</a>
+    <a href="/social.html">Social</a>
+    <a href="/exchange.html">Exchange</a>
+    <a href="/marketplace.html">Marketplace</a>
+    <a href="/explorer.html">Explorer</a>
+    <span id="nav-user" style="display:none">
+      <span style="color:var(--green);font-weight:bold" id="nav-addr"></span>
+      <span style="color:var(--yellow);margin:0 8px" id="nav-balance"></span>
+      <a onclick="logout()" style="color:var(--red);font-size:12px">Logout</a>
+    </span>
+  </div>
+</nav>
+
+<!-- LOGIN -->
+<div id="login-panel" class="login-box" style="margin-top:120px">
+  <h2>IOTAI AI Agents</h2>
+  <p>Chat with AI agents powered by GPT-4, Claude, Gemini, and more.<br>Pay per query with IOTAI tokens. Or register your own agent and earn IOTAI!</p>
+  <div class="form-group">
+    <label>Seed phrase or passphrase</label>
+    <input type="password" id="login-seed" placeholder="Enter your 12-word seed phrase">
+  </div>
+  <button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="login()">Login</button>
+  <p id="login-error" style="color:var(--red);font-size:13px;display:none;margin-top:10px"></p>
+</div>
+
+<!-- MAIN APP -->
+<div id="app" class="app" style="display:none">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="tabs">
+      <div class="tab active" onclick="showMainTab('chat')">Chat</div>
+      <div class="tab" onclick="showMainTab('myagents')">My Agents</div>
+    </div>
+
+    <!-- AGENT BROWSER (chat tab) -->
+    <div id="sidebar-chat">
+      <div class="sidebar-header">
+        <input type="text" id="search-input" placeholder="Search agents..." oninput="filterAgents()">
+        <div class="sidebar-filters">
+          <select id="filter-model" onchange="filterAgents()">
+            <option value="">All Models</option>
+          </select>
+          <select id="filter-sort" onchange="filterAgents()">
+            <option value="">Newest</option>
+            <option value="price-asc">Price: Low</option>
+            <option value="price-desc">Price: High</option>
+            <option value="rating">Best Rated</option>
+            <option value="popular">Most Used</option>
+          </select>
+        </div>
+      </div>
+      <div class="agent-list" id="agent-list">
+        <p style="color:var(--muted);text-align:center;padding:40px;font-size:13px">Loading agents...</p>
+      </div>
+    </div>
+
+    <!-- MY AGENTS (my agents tab) -->
+    <div id="sidebar-myagents" class="hidden" style="flex:1;overflow-y:auto;padding:12px">
+      <button class="btn btn-green btn-small" style="width:100%;margin-bottom:12px" onclick="showRegisterForm()">+ Register New Agent</button>
+      <div id="my-agents-list"></div>
+    </div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="chat-area">
+    <!-- NO AGENT SELECTED -->
+    <div id="chat-empty" class="chat-empty">
+      <div>
+        <div style="font-size:48px;margin-bottom:16px">&#129302;</div>
+        <h3>Select an AI Agent to start chatting</h3>
+        <p style="margin-top:8px;font-size:13px">Browse agents on the left. Each query costs IOTAI tokens.</p>
+      </div>
+    </div>
+
+    <!-- CHAT VIEW -->
+    <div id="chat-view" class="hidden" style="display:none;flex-direction:column;height:100%">
+      <div class="chat-header">
+        <div class="chat-header-info">
+          <span class="status-dot status-online" id="chat-status-dot"></span>
+          <div>
+            <h3 id="chat-agent-name">Agent</h3>
+            <span style="font-size:12px;color:var(--muted)" id="chat-agent-meta"></span>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="font-size:13px;color:var(--yellow)" id="chat-price"></span>
+          <button class="btn btn-small btn-primary" onclick="newConversation()">New Chat</button>
+        </div>
+      </div>
+      <div class="chat-messages" id="chat-messages"></div>
+      <div class="chat-input">
+        <div class="chat-input-row">
+          <textarea id="chat-text" placeholder="Type your message..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendQuery()}"></textarea>
+          <button class="btn btn-primary" onclick="sendQuery()" id="send-btn">Send</button>
+        </div>
+        <div class="chat-input-meta">
+          <span>Cost: <strong id="chat-cost">0</strong> IOTAI per message</span>
+          <span>Balance: <strong id="chat-balance">0</strong> IOTAI</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- REGISTER AGENT FORM -->
+    <div id="register-view" class="hidden my-agents-panel">
+      <h3 style="margin-bottom:16px">Register Your AI Agent</h3>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:20px">Register your agent to earn IOTAI tokens when users chat with it. You'll need to run the <code>agent-serve</code> command on your machine to process queries.</p>
+      <div class="form-group">
+        <label>Agent Name</label>
+        <input type="text" id="reg-name" placeholder="My GPT-4 Assistant" maxlength="50">
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <textarea id="reg-desc" placeholder="What does your agent do? What is it best at?" maxlength="500" rows="3"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>AI Model</label>
+          <select id="reg-model"></select>
+        </div>
+        <div class="form-group">
+          <label>Price per Query (IOTAI)</label>
+          <input type="number" id="reg-price" placeholder="5" min="1" step="1" value="5">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Tags (comma-separated)</label>
+        <input type="text" id="reg-tags" placeholder="general, coding, translation">
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="btn btn-green" onclick="registerAgent()">Register Agent</button>
+        <button class="btn btn-small" style="background:var(--card);color:var(--text)" onclick="hideRegisterForm()">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+<script src="/js/browser-node.js"></script>
+<script>
+const API = window.location.origin;
+let state = { token: null, address: null, balance: 0 };
+let selectedAgent = null;
+let conversationId = null;
+let allAgents = [];
+let pollingTimer = null;
+
+// ---- API ----
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (state.token) opts.headers['Authorization'] = 'Bearer ' + state.token;
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(API + path, opts);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+function toast(msg, isError) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (isError ? ' error' : '');
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 3000);
+}
+
+function shortAddr(a) { return a ? a.substring(0, 12) + '...' + a.substring(a.length - 6) : ''; }
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function timeAgo(ts) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
+
+function modelClass(m) {
+  if (m.startsWith('gpt')) return 'model-gpt';
+  if (m.startsWith('claude')) return 'model-claude';
+  if (m.startsWith('gemini')) return 'model-gemini';
+  return 'model-other';
+}
+
+function starsHtml(rating) {
+  if (!rating) return '<span style="color:var(--muted)">No reviews</span>';
+  let s = '';
+  for (let i = 1; i <= 5; i++) s += i <= Math.round(rating) ? '&#9733;' : '&#9734;';
+  return '<span class="rating-stars">' + s + '</span> <span style="color:var(--muted)">(' + rating + ')</span>';
+}
+
+// ---- AUTH ----
+async function login() {
+  const seed = document.getElementById('login-seed').value.trim();
+  if (!seed) return;
+  try {
+    const body = seed.split(/\s+/).length >= 12 ? { mnemonic: seed } : { passphrase: seed };
+    const data = await api('POST', '/api/v1/auth/token', body);
+    state.token = data.token;
+    state.address = data.address;
+    localStorage.setItem('iotai_agents_token', data.token);
+    localStorage.setItem('iotai_agents_address', data.address);
+    localStorage.setItem('iotai_agents_seed', seed);
+    await enterApp();
+  } catch (e) {
+    document.getElementById('login-error').textContent = e.message;
+    document.getElementById('login-error').style.display = 'block';
+  }
+}
+
+function logout() {
+  state = { token: null, address: null, balance: 0 };
+  selectedAgent = null;
+  conversationId = null;
+  if (pollingTimer) clearInterval(pollingTimer);
+  localStorage.removeItem('iotai_agents_token');
+  localStorage.removeItem('iotai_agents_address');
+  localStorage.removeItem('iotai_agents_seed');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-panel').style.display = 'block';
+  document.getElementById('nav-user').style.display = 'none';
+}
+
+async function enterApp() {
+  document.getElementById('login-panel').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('nav-addr').textContent = shortAddr(state.address);
+  document.getElementById('nav-user').style.display = 'inline';
+  await updateBalance();
+  await loadAgents();
+  await loadModels();
+}
+
+async function updateBalance() {
+  try {
+    const b = await api('GET', '/api/v1/balance');
+    state.balance = b.balance || 0;
+    document.getElementById('nav-balance').textContent = state.balance.toLocaleString() + ' IOTAI';
+    document.getElementById('chat-balance').textContent = state.balance.toLocaleString();
+  } catch {}
+}
+
+// ---- TABS ----
+function showMainTab(name) {
+  document.querySelectorAll('.tabs .tab').forEach((t, i) => {
+    t.classList.toggle('active', (name === 'chat' && i === 0) || (name === 'myagents' && i === 1));
+  });
+  document.getElementById('sidebar-chat').classList.toggle('hidden', name !== 'chat');
+  document.getElementById('sidebar-myagents').classList.toggle('hidden', name !== 'myagents');
+  if (name === 'myagents') loadMyAgents();
+  if (name === 'chat') {
+    document.getElementById('register-view').classList.add('hidden');
+    if (selectedAgent) {
+      document.getElementById('chat-view').style.display = 'flex';
+      document.getElementById('chat-empty').style.display = 'none';
+    }
+  }
+}
+
+// ---- AGENT BROWSER ----
+async function loadModels() {
+  try {
+    const models = await api('GET', '/api/v1/agents/models');
+    const sel = document.getElementById('filter-model');
+    const regSel = document.getElementById('reg-model');
+    models.forEach(m => {
+      sel.innerHTML += `<option value="${m}">${m}</option>`;
+      regSel.innerHTML += `<option value="${m}">${m}</option>`;
+    });
+  } catch {}
+}
+
+async function loadAgents() {
+  try {
+    const data = await api('GET', '/api/v1/agents/list?status=online');
+    allAgents = data.agents || [];
+    renderAgents(allAgents);
+  } catch (e) { console.error(e); }
+}
+
+function filterAgents() {
+  const search = document.getElementById('search-input').value.toLowerCase();
+  const model = document.getElementById('filter-model').value;
+  const sort = document.getElementById('filter-sort').value;
+
+  let list = allAgents;
+  if (search) list = list.filter(a => a.name.toLowerCase().includes(search) || a.description.toLowerCase().includes(search));
+  if (model) list = list.filter(a => a.model === model);
+
+  if (sort === 'price-asc') list = [...list].sort((a, b) => a.pricePerQuery - b.pricePerQuery);
+  else if (sort === 'price-desc') list = [...list].sort((a, b) => b.pricePerQuery - a.pricePerQuery);
+  else if (sort === 'rating') list = [...list].sort((a, b) => b.avgRating - a.avgRating);
+  else if (sort === 'popular') list = [...list].sort((a, b) => b.totalQueries - a.totalQueries);
+
+  renderAgents(list);
+}
+
+function renderAgents(list) {
+  const el = document.getElementById('agent-list');
+  if (list.length === 0) {
+    el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:40px;font-size:13px">No agents found. Be the first to register one!</p>';
+    return;
+  }
+  el.innerHTML = list.map(a => `
+    <div class="agent-card ${selectedAgent?.agentId === a.agentId ? 'selected' : ''}" onclick="selectAgent('${a.agentId}')">
+      <div class="agent-name">
+        <span class="status-dot ${a.status === 'online' ? 'status-online' : 'status-offline'}"></span>
+        ${escapeHtml(a.name)}
+        <span class="model-badge ${modelClass(a.model)}">${a.model}</span>
+      </div>
+      <div class="agent-desc">${escapeHtml(a.description)}</div>
+      <div class="agent-meta">
+        <span style="color:var(--yellow);font-weight:bold">${a.pricePerQuery} IOTAI/query</span>
+        <span>${starsHtml(a.avgRating)}</span>
+        <span>${a.totalQueries} queries</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ---- SELECT AGENT & CHAT ----
+async function selectAgent(agentId) {
+  const agent = allAgents.find(a => a.agentId === agentId);
+  if (!agent) return;
+  selectedAgent = agent;
+
+  // Restore conversation from localStorage or start new
+  const savedConv = localStorage.getItem('iotai_conv_' + agentId);
+  conversationId = savedConv || null;
+
+  document.getElementById('chat-empty').style.display = 'none';
+  document.getElementById('register-view').classList.add('hidden');
+  document.getElementById('chat-view').style.display = 'flex';
+
+  document.getElementById('chat-agent-name').textContent = agent.name;
+  document.getElementById('chat-agent-meta').textContent = agent.model + ' | ' + agent.totalQueries + ' queries | ' + shortAddr(agent.owner);
+  document.getElementById('chat-price').textContent = agent.pricePerQuery + ' IOTAI/query';
+  document.getElementById('chat-cost').textContent = agent.pricePerQuery;
+  document.getElementById('chat-status-dot').className = 'status-dot ' + (agent.status === 'online' ? 'status-online' : 'status-offline');
+
+  renderAgents(allAgents); // update selected state
+
+  // Load conversation if exists
+  if (conversationId) {
+    await loadConversation();
+  } else {
+    document.getElementById('chat-messages').innerHTML = `
+      <div style="text-align:center;color:var(--muted);padding:40px;font-size:13px">
+        <div style="font-size:32px;margin-bottom:8px">&#128172;</div>
+        Start a conversation with <strong>${escapeHtml(agent.name)}</strong><br>
+        Each message costs <strong style="color:var(--yellow)">${agent.pricePerQuery} IOTAI</strong>
+      </div>`;
+  }
+}
+
+function newConversation() {
+  conversationId = null;
+  if (selectedAgent) {
+    localStorage.removeItem('iotai_conv_' + selectedAgent.agentId);
+    document.getElementById('chat-messages').innerHTML = `
+      <div style="text-align:center;color:var(--muted);padding:40px;font-size:13px">
+        <div style="font-size:32px;margin-bottom:8px">&#128172;</div>
+        New conversation started
+      </div>`;
+  }
+}
+
+async function loadConversation() {
+  if (!conversationId) return;
+  try {
+    const msgs = await api('GET', '/api/v1/agents/conversation/' + conversationId);
+    const el = document.getElementById('chat-messages');
+    if (!msgs || msgs.length === 0) {
+      el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:40px">No messages yet</p>';
+      return;
+    }
+    el.innerHTML = msgs.map(q => {
+      let html = `<div class="msg-user">${escapeHtml(q.message)}<div class="msg-time">${timeAgo(q.createdAt)}</div></div>`;
+      if (q.status === 'completed' && q.response) {
+        html += `<div class="msg-agent">${formatResponse(q.response)}<div class="msg-time">${timeAgo(q.respondedAt)}</div></div>`;
+      } else if (q.status === 'pending') {
+        html += `<div class="msg-pending"><span class="dots">&#9679; &#9679; &#9679;</span> Thinking...<div class="msg-time">waiting for response</div></div>`;
+      } else if (q.status === 'expired') {
+        html += `<div class="msg-pending" style="color:var(--red)">Agent did not respond (expired)<div class="msg-time">${timeAgo(q.createdAt)}</div></div>`;
+      }
+      return html;
+    }).join('');
+    el.scrollTop = el.scrollHeight;
+  } catch (e) { console.error(e); }
+}
+
+function formatResponse(text) {
+  // Basic markdown-like formatting
+  return escapeHtml(text)
+    .replace(/```([\s\S]*?)```/g, '<pre style="background:var(--bg);padding:10px;border-radius:6px;margin:6px 0;overflow-x:auto;font-size:13px">$1</pre>')
+    .replace(/`([^`]+)`/g, '<code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:13px">$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>');
+}
+
+// ---- SEND QUERY ----
+async function sendQuery() {
+  if (!selectedAgent) return toast('Select an agent first', true);
+  const text = document.getElementById('chat-text').value.trim();
+  if (!text) return;
+  if (text.length > 4000) return toast('Message too long (max 4000 chars)', true);
+
+  const btn = document.getElementById('send-btn');
+  btn.disabled = true;
+
+  try {
+    const result = await api('POST', '/api/v1/agents/query', {
+      agentId: selectedAgent.agentId,
+      message: text,
+      conversationId: conversationId,
+    });
+
+    conversationId = result.conversationId;
+    localStorage.setItem('iotai_conv_' + selectedAgent.agentId, conversationId);
+
+    document.getElementById('chat-text').value = '';
+    await updateBalance();
+
+    // Add user message to chat
+    const el = document.getElementById('chat-messages');
+    // Remove empty state
+    const emptyMsg = el.querySelector('div[style*="text-align:center"]');
+    if (emptyMsg) emptyMsg.remove();
+
+    el.innerHTML += `<div class="msg-user">${escapeHtml(text)}<div class="msg-time">just now</div></div>`;
+    el.innerHTML += `<div class="msg-pending" id="pending-${result.queryId}"><span class="dots">&#9679; &#9679; &#9679;</span> Thinking...<div class="msg-time">waiting for response</div></div>`;
+    el.scrollTop = el.scrollHeight;
+
+    // Start polling for response
+    pollForResponse(result.queryId);
+
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function pollForResponse(queryId) {
+  let attempts = 0;
+  const maxAttempts = 150; // 5 minutes at 2s intervals
+
+  if (pollingTimer) clearInterval(pollingTimer);
+  pollingTimer = setInterval(async () => {
+    attempts++;
+    try {
+      const q = await api('GET', '/api/v1/agents/query/' + queryId);
+      if (q.status === 'completed' && q.response) {
+        clearInterval(pollingTimer);
+        pollingTimer = null;
+
+        const pendingEl = document.getElementById('pending-' + queryId);
+        if (pendingEl) {
+          pendingEl.outerHTML = `<div class="msg-agent">${formatResponse(q.response)}<div class="msg-time">just now</div></div>`;
+        }
+        const el = document.getElementById('chat-messages');
+        el.scrollTop = el.scrollHeight;
+      } else if (q.status === 'expired' || attempts >= maxAttempts) {
+        clearInterval(pollingTimer);
+        pollingTimer = null;
+
+        const pendingEl = document.getElementById('pending-' + queryId);
+        if (pendingEl) {
+          pendingEl.outerHTML = `<div class="msg-pending" style="color:var(--red)">Agent did not respond (timed out)</div>`;
+        }
+      }
+    } catch (e) {
+      console.error('Poll error:', e);
+    }
+  }, 2000);
+}
+
+// ---- MY AGENTS ----
+async function loadMyAgents() {
+  try {
+    const list = await api('GET', '/api/v1/agents/my/agents');
+    const el = document.getElementById('my-agents-list');
+    if (!list || list.length === 0) {
+      el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;font-size:13px">You have no agents. Register one to start earning IOTAI!</p>';
+      return;
+    }
+    el.innerHTML = list.map(a => `
+      <div class="agent-card">
+        <div class="agent-name">
+          <span class="status-dot ${a.status === 'online' ? 'status-online' : 'status-offline'}"></span>
+          ${escapeHtml(a.name)}
+          <span class="model-badge ${modelClass(a.model)}">${a.model}</span>
+        </div>
+        <div class="agent-meta" style="margin-top:6px">
+          <span style="color:var(--yellow)">${a.pricePerQuery} IOTAI/query</span>
+          <span>${a.totalQueries || 0} queries</span>
+          <span>${starsHtml(a.avgRating)}</span>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:6px">
+          <button class="btn btn-small ${a.status === 'online' ? 'btn-orange' : 'btn-green'}"
+            onclick="toggleAgentStatus('${a.agentId}', '${a.status === 'online' ? 'offline' : 'online'}')">
+            ${a.status === 'online' ? 'Go Offline' : 'Go Online'}
+          </button>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) { console.error(e); }
+}
+
+function showRegisterForm() {
+  document.getElementById('chat-empty').style.display = 'none';
+  document.getElementById('chat-view').style.display = 'none';
+  document.getElementById('register-view').classList.remove('hidden');
+}
+
+function hideRegisterForm() {
+  document.getElementById('register-view').classList.add('hidden');
+  if (selectedAgent) {
+    document.getElementById('chat-view').style.display = 'flex';
+  } else {
+    document.getElementById('chat-empty').style.display = 'flex';
+  }
+}
+
+async function registerAgent() {
+  const name = document.getElementById('reg-name').value.trim();
+  const description = document.getElementById('reg-desc').value.trim();
+  const model = document.getElementById('reg-model').value;
+  const pricePerQuery = parseInt(document.getElementById('reg-price').value);
+  const tagsRaw = document.getElementById('reg-tags').value.trim();
+  const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+  if (!name || !description || !model) return toast('Fill in all fields', true);
+
+  try {
+    await api('POST', '/api/v1/agents/register', { name, description, model, pricePerQuery, tags });
+    toast('Agent registered! Now run agent-serve to start processing queries.');
+    hideRegisterForm();
+    loadMyAgents();
+    loadAgents();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function toggleAgentStatus(agentId, newStatus) {
+  try {
+    await api('POST', '/api/v1/agents/update', { agentId, status: newStatus });
+    toast('Agent is now ' + newStatus);
+    loadMyAgents();
+    loadAgents();
+  } catch (e) { toast(e.message, true); }
+}
+
+// ---- AUTO LOGIN ----
+(async () => {
+  const saved = localStorage.getItem('iotai_agents_seed');
+  if (saved) {
+    try {
+      const body = saved.split(/\s+/).length >= 12 ? { mnemonic: saved } : { passphrase: saved };
+      const data = await api('POST', '/api/v1/auth/token', body);
+      state.token = data.token;
+      state.address = data.address;
+      localStorage.setItem('iotai_agents_token', data.token);
+      await enterApp();
+    } catch {
+      logout();
+    }
+  }
+})();
+</script>
+</body>
+</html>
