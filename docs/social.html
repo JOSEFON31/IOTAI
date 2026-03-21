@@ -899,20 +899,31 @@ function showMsgTab(tab) {
 
 async function loadInbox() {
   try {
-    const data = await api('GET', '/api/v1/encryption/inbox');
+    const messages = await api('GET', '/api/v1/encryption/inbox');
     const el = document.getElementById('msg-inbox');
-    if (!data || data.length === 0) {
+    if (!messages || messages.length === 0) {
       el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:40px">No messages yet.</p>';
-    } else {
-      el.innerHTML = data.map(m => `
-        <div class="msg-item">
-          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted)">
-            <span>From: <a onclick="viewUser('${m.from}')">${shortAddr(m.from)}</a></span>
-            <span>${timeAgo(m.timestamp)}</span>
-          </div>
-          <div style="font-size:13px;margin-top:4px;color:var(--text)">${m.decrypted ? escapeHtml(m.content) : '<em style="color:var(--muted)">[encrypted]</em>'}</div>
-        </div>`).join('');
+      return;
     }
+    // Decrypt each message
+    const decrypted = [];
+    for (const m of messages) {
+      try {
+        const d = await api('POST', '/api/v1/encryption/decrypt', { messageId: m.messageId });
+        decrypted.push({ ...m, content: typeof d.data === 'string' ? d.data : JSON.stringify(d.data), ok: true });
+      } catch {
+        decrypted.push({ ...m, content: null, ok: false });
+      }
+    }
+    el.innerHTML = decrypted.map(m => `
+      <div class="msg-item">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted)">
+          <span>From: <a onclick="viewUser('${m.from}')">${shortAddr(m.from)}</a></span>
+          <span>${timeAgo(m.sentAt)}</span>
+        </div>
+        ${m.subject ? '<div style="font-size:12px;font-weight:bold;margin-top:2px">' + escapeHtml(m.subject) + '</div>' : ''}
+        <div style="font-size:13px;margin-top:4px;color:var(--text)">${m.ok ? escapeHtml(m.content) : '<em style="color:var(--muted)">[encrypted]</em>'}</div>
+      </div>`).join('');
   } catch (e) { console.error(e); }
 }
 
@@ -927,7 +938,7 @@ async function loadSent() {
         <div class="msg-item">
           <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted)">
             <span>To: ${shortAddr(m.to)}</span>
-            <span>${timeAgo(m.timestamp)}</span>
+            <span>${timeAgo(m.sentAt)}</span>
           </div>
         </div>`).join('');
     }
