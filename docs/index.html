@@ -185,7 +185,7 @@
     <a href="/exchange.html" style="color:#FDCB6E;font-weight:bold">Exchange</a>
     <a href="/dashboard.html">Dashboard</a>
     <a href="#cli">CLI Wallet</a>
-    <a href="#run">Run a Node</a>
+    <a href="#run" style="color:#00B894">Run a Node</a>
     <a href="/IOTAI-Whitepaper.pdf" target="_blank" style="color:#FDCB6E;font-weight:bold">Whitepaper</a>
   </div>
 </nav>
@@ -872,45 +872,175 @@ IOTAI_API=https://iotai.onrender.com npm run wallet -- send iotai_address 100</c
 
 <!-- RUN A NODE -->
 <section id="run">
-  <h2>Run a Node</h2>
-  <p>Every device strengthens the network. Here's how to join.</p>
+  <h2>Run a Node &mdash; Join the Network</h2>
+  <p>IOTAI is a <strong>fully decentralized</strong> network. There is no central server. Every node is equal. The more nodes exist, the stronger and more resilient the network becomes. <strong>You can help make IOTAI unstoppable.</strong></p>
 
-  <h3>Quick Start (Synced with Main Network)</h3>
-  <pre><code><span class="cm"># Clone the repository</span>
+  <div style="background:var(--card);border:2px solid var(--green);border-radius:12px;padding:24px;margin:24px 0">
+    <h3 style="color:var(--green);margin-bottom:10px">Why Run a Node?</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-top:12px">
+      <div style="text-align:center;padding:12px">
+        <div style="font-size:28px;margin-bottom:6px">&#128737;</div>
+        <strong>Protect the Network</strong>
+        <p style="color:var(--muted);font-size:13px;margin-top:4px">Your node holds a complete copy of all transactions. If other nodes go down, yours keeps the network alive.</p>
+      </div>
+      <div style="text-align:center;padding:12px">
+        <div style="font-size:28px;margin-bottom:6px">&#9889;</div>
+        <strong>Faster Access</strong>
+        <p style="color:var(--muted);font-size:13px;margin-top:4px">Your own node means zero latency for wallet operations, social network, and the P2P exchange.</p>
+      </div>
+      <div style="text-align:center;padding:12px">
+        <div style="font-size:28px;margin-bottom:6px">&#127760;</div>
+        <strong>True Decentralization</strong>
+        <p style="color:var(--muted);font-size:13px;margin-top:4px">No company or server can shut down IOTAI. Each node is independent and syncs with all others automatically.</p>
+      </div>
+      <div style="text-align:center;padding:12px">
+        <div style="font-size:28px;margin-bottom:6px">&#128679;</div>
+        <strong>Zero Cost</strong>
+        <p style="color:var(--muted);font-size:13px;margin-top:4px">Run on your PC, a $5 VPS, or free platforms like Render and Railway. No special hardware needed.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- OPTION 1: LOCAL PC -->
+  <h3 style="margin-top:32px">Option 1: Run on Your PC (Easiest)</h3>
+  <p style="color:var(--muted);margin-bottom:12px">Requirements: <strong>Node.js 18+</strong> and <strong>Git</strong>. Works on Windows, Mac, and Linux.</p>
+  <pre><code><span class="cm"># 1. Clone the repository</span>
 git clone https://github.com/JOSEFON31/IOTAI.git
 cd IOTAI
 
-<span class="cm"># Install dependencies</span>
+<span class="cm"># 2. Install dependencies</span>
 npm install
 
-<span class="cm"># Start your node synced with the main network</span>
-node src/index.js --api-port 8080 --sync-from https://iotai.onrender.com
+<span class="cm"># 3. Start your node (auto-syncs with the network)</span>
+node src/server.js
 
-<span class="cm"># Start a second node (auto-discovers the first via mDNS)</span>
-node src/index.js --api-port 8081
+<span class="cm"># Your node is now running at http://localhost:8080</span>
+<span class="cm"># It automatically connects to seed nodes and syncs the full DAG</span></code></pre>
 
-<span class="cm"># Or connect to a specific peer</span>
-node src/index.js --peer /ip4/192.168.1.100/tcp/4001/p2p/QmPeerId...</code></pre>
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;margin:12px 0;font-size:13px">
+    <strong style="color:var(--yellow)">Want others to connect to your node?</strong> Use <a href="https://ngrok.com" target="_blank">ngrok</a> to expose it to the internet:
+    <pre style="margin:8px 0 0"><code>ngrok http 8080
+<span class="cm"># Gives you a public URL like https://abc123.ngrok.io</span></code></pre>
+  </div>
 
-  <h3>Sync Options</h3>
+  <!-- OPTION 2: RENDER -->
+  <h3 style="margin-top:32px">Option 2: Deploy on Render (Free, Always Online)</h3>
+  <p style="color:var(--muted);margin-bottom:12px"><a href="https://render.com" target="_blank">Render</a> offers free web services. Your node stays online 24/7 without your PC being on.</p>
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px">
+    <ol style="margin:0;padding-left:20px;font-size:14px;line-height:2.2">
+      <li>Create a free account at <a href="https://render.com" target="_blank">render.com</a></li>
+      <li>Click <strong>"New +"</strong> &rarr; <strong>"Web Service"</strong></li>
+      <li>Connect your GitHub and select the <strong>IOTAI</strong> repository (fork it first if needed)</li>
+      <li>Configure:
+        <table style="margin:8px 0;font-size:13px;width:100%">
+          <tr><td style="color:var(--muted);width:160px">Build Command</td><td><code>npm install</code></td></tr>
+          <tr><td style="color:var(--muted)">Start Command</td><td><code>node src/server.js</code></td></tr>
+          <tr><td style="color:var(--muted)">Instance Type</td><td>Free</td></tr>
+        </table>
+      </li>
+      <li>Click <strong>"Create Web Service"</strong> and wait for deploy</li>
+      <li>Your node is live! It will auto-sync with the network</li>
+    </ol>
+  </div>
+
+  <!-- OPTION 3: RAILWAY -->
+  <h3 style="margin-top:32px">Option 3: Deploy on Railway (Free Credits)</h3>
+  <p style="color:var(--muted);margin-bottom:12px"><a href="https://railway.app" target="_blank">Railway</a> gives $5 free credits/month. Fast deploys.</p>
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px">
+    <ol style="margin:0;padding-left:20px;font-size:14px;line-height:2.2">
+      <li>Go to <a href="https://railway.app" target="_blank">railway.app</a> and sign up with GitHub</li>
+      <li>Click <strong>"New Project"</strong> &rarr; <strong>"Deploy from GitHub Repo"</strong></li>
+      <li>Select the <strong>IOTAI</strong> repository</li>
+      <li>In Settings, set Start Command: <code>node src/server.js</code></li>
+      <li>Railway assigns a public URL automatically. Done!</li>
+    </ol>
+  </div>
+
+  <!-- OPTION 4: VPS -->
+  <h3 style="margin-top:32px">Option 4: VPS (Most Reliable, ~$5/month)</h3>
+  <p style="color:var(--muted);margin-bottom:12px">For a permanent, high-uptime node. Use <a href="https://www.digitalocean.com" target="_blank">DigitalOcean</a>, <a href="https://www.hetzner.com" target="_blank">Hetzner</a>, <a href="https://www.vultr.com" target="_blank">Vultr</a>, or any VPS provider.</p>
+  <pre><code><span class="cm"># On your VPS (Ubuntu/Debian)</span>
+sudo apt update && sudo apt install -y nodejs npm git
+
+git clone https://github.com/JOSEFON31/IOTAI.git
+cd IOTAI && npm install
+
+<span class="cm"># Run with pm2 to keep it alive forever</span>
+npm install -g pm2
+pm2 start src/server.js --name iotai-node
+pm2 save && pm2 startup
+
+<span class="cm"># Your node runs at http://your-vps-ip:8080</span>
+<span class="cm"># Optional: Add a reverse proxy (nginx) for HTTPS</span></code></pre>
+
+  <!-- REGISTER YOUR NODE -->
+  <div style="background:var(--card);border:2px solid var(--accent);border-radius:12px;padding:24px;margin:32px 0">
+    <h3 style="color:var(--accent);margin-bottom:12px">Register Your Node in the Network</h3>
+    <p style="font-size:14px;color:var(--muted);margin-bottom:16px">
+      After deploying your node, it automatically syncs with the existing network. But to make it a <strong>permanent seed node</strong> that others can bootstrap from, you have two options:
+    </p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px">
+        <h4 style="color:var(--green);font-size:14px;margin-bottom:8px">Instant (API Call)</h4>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:8px">Connect nodes immediately (resets on restart):</p>
+        <pre style="font-size:12px;margin:0"><code>curl -X POST \
+  https://iotai.onrender.com\
+/api/v1/network/peers/add \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://YOUR-NODE-URL"}'</code></pre>
+      </div>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px">
+        <h4 style="color:var(--yellow);font-size:14px;margin-bottom:8px">Permanent (Pull Request)</h4>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:8px">Add your URL to the seed list forever:</p>
+        <pre style="font-size:12px;margin:0"><code><span class="cm">// Edit src/core/peers.js</span>
+export const SEED_NODES = [
+  'https://iotai.onrender.com',
+  'https://YOUR-NODE.railway.app',
+  <span class="cm">// Add your node URL here!</span>
+];
+<span class="cm">// Then submit a Pull Request</span></code></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- HOW SYNC WORKS -->
+  <h3 style="margin-top:32px">How Node Sync Works</h3>
+  <p style="color:var(--muted);margin-bottom:12px">Every IOTAI node is fully autonomous and self-healing:</p>
   <table>
-    <tr><th>Flag</th><th>Description</th></tr>
-    <tr><td><code>--sync-from &lt;url&gt;</code></td><td>Sync transactions from a remote HTTP node (e.g. <code>https://iotai.onrender.com</code>). Downloads all transactions at startup and syncs every 60s.</td></tr>
-    <tr><td><code>--api-port &lt;port&gt;</code></td><td>Set the API port (default: 8080).</td></tr>
-    <tr><td><code>--port &lt;port&gt;</code></td><td>Set the P2P port (default: random).</td></tr>
-    <tr><td><code>--peer &lt;addr&gt;</code></td><td>Connect to a specific libp2p peer.</td></tr>
+    <tr><th style="width:200px">Feature</th><th>Description</th></tr>
+    <tr><td><strong>Auto-Discovery</strong></td><td>Nodes automatically connect to seed nodes on startup and discover new peers through the network.</td></tr>
+    <tr><td><strong>Peer Exchange</strong></td><td>Every 5 minutes, nodes ask their peers "who else do you know?" and connect to new nodes automatically.</td></tr>
+    <tr><td><strong>Health Checks</strong></td><td>Dead peers are removed automatically. If a seed node comes back online, it reconnects.</td></tr>
+    <tr><td><strong>Full DAG Sync</strong></td><td>New nodes download the complete transaction history from the healthiest peer. No central database needed.</td></tr>
+    <tr><td><strong>Real-Time Relay</strong></td><td>New transactions are broadcast to all peers within seconds. Every node has the same data.</td></tr>
+    <tr><td><strong>Disk Persistence</strong></td><td>Transactions are saved to disk. If your node restarts, it loads from disk instantly &mdash; no re-download needed.</td></tr>
+    <tr><td><strong>No GitHub Required</strong></td><td>Nodes recover state from peers. GitHub backup is optional, not required.</td></tr>
   </table>
 
-  <h3>Run the Demo (Offline)</h3>
-  <pre><code>node src/demo.js</code></pre>
+  <!-- CLI FLAGS -->
+  <h3 style="margin-top:32px">Advanced: CLI Options</h3>
+  <table>
+    <tr><th>Flag</th><th>Description</th></tr>
+    <tr><td><code>--sync-from &lt;url&gt;</code></td><td>Sync from a specific remote node at startup (e.g. <code>https://iotai.onrender.com</code>)</td></tr>
+    <tr><td><code>--api-port &lt;port&gt;</code></td><td>Set the HTTP API port (default: 8080)</td></tr>
+    <tr><td><code>--port &lt;port&gt;</code></td><td>Set the libp2p P2P port (default: random)</td></tr>
+    <tr><td><code>--peer &lt;addr&gt;</code></td><td>Connect to a specific libp2p peer by multiaddress</td></tr>
+  </table>
 
-  <h3>Visualize the DAG</h3>
-  <pre><code>node src/visualizer.js 3000
-<span class="cm"># Open http://localhost:3000 in your browser</span></code></pre>
-
-  <h3>Run Tests</h3>
+  <h3 style="margin-top:32px">Run Tests</h3>
   <pre><code><span class="cm"># Run the full test suite (199 tests across 12 suites)</span>
 npm test</code></pre>
+
+  <!-- BROWSER NODE -->
+  <div style="background:var(--card);border:1px solid var(--green);border-radius:12px;padding:20px;margin-top:24px">
+    <h3 style="color:var(--green);margin-bottom:8px">You're Already a Node!</h3>
+    <p style="font-size:14px;color:var(--muted)">
+      Right now, your browser is running a lightweight IOTAI node. Look at the <strong style="color:var(--green)">green dot</strong> in the bottom-right corner &mdash;
+      that's your browser node caching transactions, validating data, and syncing with the network. It even persists data in IndexedDB, so your local copy survives page refreshes.
+      If the main server goes down, your browser automatically tries other nodes in the network.
+    </p>
+  </div>
 </section>
 
 <footer>
