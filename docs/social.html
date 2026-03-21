@@ -910,6 +910,20 @@ async function loadMyProfile() {
 let chatPartner = null;
 let allMessages = [];
 
+function saveSentContent(messageId, content) {
+  try {
+    const cache = JSON.parse(localStorage.getItem('iotai_sent_cache') || '{}');
+    cache[messageId] = content;
+    localStorage.setItem('iotai_sent_cache', JSON.stringify(cache));
+  } catch {}
+}
+function getSentContent(messageId) {
+  try {
+    const cache = JSON.parse(localStorage.getItem('iotai_sent_cache') || '{}');
+    return cache[messageId] || null;
+  } catch { return null; }
+}
+
 async function loadConversations() {
   try {
     let inbox = [];
@@ -928,7 +942,8 @@ async function loadConversations() {
     }
     for (const m of sent) {
       if (m.to === 'group') continue;
-      decrypted.push({ ...m, content: null, dir: 'out', time: m.sentAt });
+      const cached = getSentContent(m.messageId);
+      decrypted.push({ ...m, content: cached, dir: 'out', time: m.sentAt });
     }
     allMessages = decrypted;
 
@@ -955,7 +970,7 @@ async function loadConversations() {
     }
     el.innerHTML = convoList.map(c => {
       const initial = c.partner[5]?.toUpperCase() || '?';
-      const preview = c.lastDir === 'out' ? 'You: (sent)' : (c.lastContent || '[encrypted]');
+      const preview = c.lastDir === 'out' ? ('You: ' + (c.lastContent || '...')) : (c.lastContent || '[encrypted]');
       return `<div class="convo-item" onclick="openChat('${c.partner}')">
         <div class="avatar" style="width:36px;height:36px;font-size:14px">${initial}</div>
         <div style="flex:1;min-width:0">
@@ -981,11 +996,13 @@ async function sendFirstMessage() {
   if (!to || !content) return toast('Recipient and message required', true);
   try {
     try { await api('POST', '/api/v1/encryption/register', {}); } catch {}
-    await api('POST', '/api/v1/encryption/send', { to, data: content });
+    const result = await api('POST', '/api/v1/encryption/send', { to, data: content });
+    if (result.messageId) saveSentContent(result.messageId, content);
     document.getElementById('msg-to').value = '';
     document.getElementById('msg-first-content').value = '';
     document.getElementById('msg-new-box').style.display = 'none';
     toast('Message sent!');
+    await loadConversations();
     openChat(to);
   } catch (e) { toast(e.message, true); }
 }
@@ -1009,7 +1026,7 @@ async function openChat(partner) {
   } else {
     el.innerHTML = msgs.map(m => {
       const isMine = m.dir === 'out';
-      const content = m.content || '(sent)';
+      const content = m.content || '...';
       return `<div style="display:flex;${isMine ? 'justify-content:flex-end' : ''}">
         <div class="bubble ${isMine ? 'bubble-mine' : 'bubble-theirs'}">
           ${escapeHtml(content)}
@@ -1033,7 +1050,8 @@ async function sendChatMessage() {
   if (!content || !chatPartner) return toast('Write a message', true);
   try {
     try { await api('POST', '/api/v1/encryption/register', {}); } catch {}
-    await api('POST', '/api/v1/encryption/send', { to: chatPartner, data: content });
+    const result = await api('POST', '/api/v1/encryption/send', { to: chatPartner, data: content });
+    if (result.messageId) saveSentContent(result.messageId, content);
     document.getElementById('chat-input').value = '';
     toast('Sent!');
     await loadConversations();
