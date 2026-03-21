@@ -412,14 +412,14 @@ async function createWallet() {
   try {
     const data = await api('POST', '/api/v1/wallet/create');
     document.getElementById('new-address').value = data.address;
-    document.getElementById('new-seed').value = data.mnemonic || data.passphrase || '';
+    document.getElementById('new-seed').value = data.seedPhrase || data.mnemonic || data.passphrase || '';
     document.getElementById('login-form').style.display = 'none';
     document.getElementById('wallet-created').style.display = 'block';
     state.token = data.token;
     state.address = data.address;
     localStorage.setItem('iotai_social_token', data.token);
     localStorage.setItem('iotai_social_address', data.address);
-    localStorage.setItem('iotai_social_seed', data.mnemonic || data.passphrase || '');
+    localStorage.setItem('iotai_social_seed', data.seedPhrase || data.mnemonic || data.passphrase || '');
   } catch (e) { showError(e.message); }
 }
 
@@ -603,18 +603,21 @@ function refreshActivePanel(postId) {
 // ---- FEED ----
 async function loadFeed() {
   feedOffset = 0;
+  const el = document.getElementById('feed-posts');
   try {
     const data = await api('GET', '/api/v1/social/feed?limit=20&offset=0');
-    const el = document.getElementById('feed-posts');
-    if (!data.posts || data.posts.length === 0) {
+    const posts = data?.posts || data || [];
+    if (!Array.isArray(posts) || posts.length === 0) {
       el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:40px">Follow other users to see their posts here.<br>Check the <a onclick="showPanel(\'global\')">Global Feed</a>!</p>';
       document.getElementById('feed-load-more').style.display = 'none';
     } else {
-      el.innerHTML = data.posts.map(p => renderPost(p)).join('');
-      document.getElementById('feed-load-more').style.display = data.posts.length >= 20 ? 'block' : 'none';
-      feedOffset = data.posts.length;
+      el.innerHTML = posts.map(p => renderPost(p)).join('');
+      document.getElementById('feed-load-more').style.display = posts.length >= 20 ? 'block' : 'none';
+      feedOffset = posts.length;
     }
-  } catch (e) { console.error('Feed error:', e); }
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--red);text-align:center;padding:20px">Error loading feed: ' + escapeHtml(e.message) + '</p>';
+  }
 }
 
 async function loadMoreFeed() {
@@ -633,17 +636,20 @@ async function loadMoreFeed() {
 // ---- GLOBAL ----
 async function loadGlobal() {
   globalOffset = 0;
+  const el = document.getElementById('global-posts');
   try {
     const data = await api('GET', '/api/v1/social/feed/global?limit=20&offset=0');
-    const el = document.getElementById('global-posts');
-    if (!data.posts || data.posts.length === 0) {
+    const posts = data?.posts || data || [];
+    if (!Array.isArray(posts) || posts.length === 0) {
       el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:40px">No posts yet. Be the first!</p>';
     } else {
-      el.innerHTML = data.posts.map(p => renderPost(p)).join('');
-      document.getElementById('global-load-more').style.display = data.posts.length >= 20 ? 'block' : 'none';
-      globalOffset = data.posts.length;
+      el.innerHTML = posts.map(p => renderPost(p)).join('');
+      document.getElementById('global-load-more').style.display = posts.length >= 20 ? 'block' : 'none';
+      globalOffset = posts.length;
     }
-  } catch (e) { console.error('Global error:', e); }
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--red);text-align:center;padding:20px">Error: ' + escapeHtml(e.message) + '</p>';
+  }
 }
 
 async function loadMoreGlobal() {
@@ -708,12 +714,15 @@ async function viewForum(forumId) {
     document.getElementById('forum-view-name').textContent = data.forum?.name || 'Forum';
     document.getElementById('forum-view-desc').textContent = data.forum?.description || '';
     const el = document.getElementById('forum-posts');
-    if (!data.posts || data.posts.length === 0) {
+    const posts = Array.isArray(data.posts) ? data.posts : (data.posts?.posts || []);
+    if (posts.length === 0) {
       el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">No posts in this forum yet.</p>';
     } else {
-      el.innerHTML = data.posts.map(p => renderPost(p)).join('');
+      el.innerHTML = posts.map(p => renderPost(p)).join('');
     }
-  } catch (e) { toast(e.message, true); }
+  } catch (e) {
+    document.getElementById('forum-posts').innerHTML = '<p style="color:var(--red);padding:20px">Error: ' + escapeHtml(e.message) + '</p>';
+  }
 }
 
 function createForumPost() {
@@ -723,19 +732,25 @@ function createForumPost() {
 // ---- POST DETAIL ----
 async function viewPost(postId) {
   const active = document.querySelector('.panel.active');
-  state.previousPanel = active ? active.id.replace('-panel', '') : 'global';
+  if (active && active.id !== 'post-detail-panel') {
+    state.previousPanel = active.id.replace('-panel', '');
+  }
   showPanelDirect('post-detail');
+  document.getElementById('comment-compose').dataset.postId = postId;
   try {
     const post = await api('GET', `/api/v1/social/post/${postId}`);
     document.getElementById('post-detail-content').innerHTML = renderPost(post, false);
-
+  } catch (e) {
+    document.getElementById('post-detail-content').innerHTML = '<p style="color:var(--red)">Error loading post: ' + escapeHtml(e.message) + '</p>';
+  }
+  try {
     const comments = await api('GET', `/api/v1/social/post/${postId}/comments`);
     const el = document.getElementById('post-comments');
-    document.getElementById('comment-compose').dataset.postId = postId;
-    if (!comments || comments.length === 0) {
+    const list = Array.isArray(comments) ? comments : [];
+    if (list.length === 0) {
       el.innerHTML = '<p style="color:var(--muted);font-size:13px">No comments yet.</p>';
     } else {
-      el.innerHTML = comments.map(c => {
+      el.innerHTML = list.map(c => {
         const profile = c.authorProfile || {};
         const initial = (profile.username || c.author || '?')[0].toUpperCase();
         return `<div class="card" style="padding:12px">
@@ -748,7 +763,9 @@ async function viewPost(postId) {
         </div>`;
       }).join('');
     }
-  } catch (e) { toast(e.message, true); }
+  } catch (e) {
+    document.getElementById('post-comments').innerHTML = '<p style="color:var(--red);font-size:13px">Error loading comments: ' + escapeHtml(e.message) + '</p>';
+  }
 }
 
 async function submitComment() {
