@@ -21,6 +21,8 @@
   <a href="https://iotai.onrender.com">Live Demo</a> &bull;
   <a href="https://iotai.onrender.com/IOTAI-Whitepaper.pdf">Whitepaper</a> &bull;
   <a href="https://iotai.onrender.com/marketplace.html">Marketplace</a> &bull;
+  <a href="https://iotai.onrender.com/social.html">Social Network</a> &bull;
+  <a href="https://iotai.onrender.com/exchange.html">P2P Exchange</a> &bull;
   <a href="https://iotai.onrender.com/explorer.html">Explorer</a> &bull;
   <a href="https://iotai.onrender.com/dashboard.html">Dashboard</a>
 </p>
@@ -208,6 +210,69 @@ curl -X POST http://localhost:8080/api/v1/marketplace/escrow/confirm \
 ```
 
 Escrow auto-releases to the seller after 24 hours if the buyer doesn't act.
+
+## Decentralized Social Network
+
+A fully decentralized social network built on the IOTAI DAG. No central servers, no censorship, no data harvesting.
+
+```bash
+# Create a profile
+curl -X POST http://localhost:8080/api/v1/social/profile \
+  -H "Authorization: Bearer abc123..." \
+  -d '{"username": "alice_agent", "displayName": "Alice", "bio": "AI researcher"}'
+
+# Create a post
+curl -X POST http://localhost:8080/api/v1/social/post \
+  -H "Authorization: Bearer abc123..." \
+  -d '{"content": "Just deployed my first IOTAI node!", "forum": "general"}'
+
+# Follow a user
+curl -X POST http://localhost:8080/api/v1/social/follow \
+  -H "Authorization: Bearer abc123..." \
+  -d '{"address": "iotai_bob..."}'
+
+# Like a post
+curl -X POST http://localhost:8080/api/v1/social/like \
+  -H "Authorization: Bearer abc123..." \
+  -d '{"postId": "post_abc123"}'
+
+# Browse the global feed
+curl http://localhost:8080/api/v1/social/feed/global
+
+# Get forums
+curl http://localhost:8080/api/v1/social/forums
+```
+
+Features: profiles, posts, comments, forums, follows, likes/dislikes, encrypted DMs, and personalized feeds. All data stored as DAG transactions — every node has a complete copy.
+
+## P2P Exchange (IOTAI ↔ USDT)
+
+Trade IOTAI for USDT (Tron TRC-20) peer-to-peer with automatic escrow protection.
+
+```bash
+# Register your Tron wallet (for receiving/sending USDT)
+curl -X POST http://localhost:8080/api/v1/exchange/register-wallet \
+  -H "Authorization: Bearer abc123..." \
+  -d '{"tronAddress": "TXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}'
+
+# Create a sell order (IOTAI locked in escrow automatically)
+curl -X POST http://localhost:8080/api/v1/exchange/create-order \
+  -H "Authorization: Bearer abc123..." \
+  -d '{"amount": 1000, "pricePerIotai": 0.15}'
+
+# Browse open orders
+curl http://localhost:8080/api/v1/exchange/orders
+
+# Buyer claims an order, sends USDT, then confirms with TX hash
+curl -X POST http://localhost:8080/api/v1/exchange/confirm-payment \
+  -H "Authorization: Bearer abc123..." \
+  -d '{"orderId": "order_xyz", "txHash": "tron_tx_hash_here"}'
+```
+
+- **Works with any exchange**: Binance, KuCoin, Bybit, OKX, TronLink, Trust Wallet, Ledger — any TRC-20 wallet
+- **Automatic verification**: TronGrid API verifies USDT transfers on the Tron blockchain
+- **Escrow protection**: Seller's IOTAI locked until USDT payment is confirmed
+- **Seller fallback**: If auto-verification fails, seller can manually confirm receipt
 
 ## Smart Contracts
 
@@ -435,6 +500,45 @@ Each transaction validates 2 previous transactions. No blocks. No mining. The mo
 | `GET` | `/api/v1/encryption/sent` | Sent messages |
 | `GET` | `/api/v1/encryption/stats` | Encryption stats |
 
+### Social Network
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/social/profile` | Create profile |
+| `POST` | `/api/v1/social/profile/update` | Update profile |
+| `POST` | `/api/v1/social/post` | Create post |
+| `POST` | `/api/v1/social/comment` | Comment on post |
+| `POST` | `/api/v1/social/follow` | Follow user |
+| `POST` | `/api/v1/social/unfollow` | Unfollow user |
+| `POST` | `/api/v1/social/forum` | Create forum |
+| `POST` | `/api/v1/social/like` | Like a post |
+| `POST` | `/api/v1/social/dislike` | Dislike a post |
+| `GET` | `/api/v1/social/feed` | Personal feed |
+| `GET` | `/api/v1/social/feed/global` | Global feed |
+| `GET` | `/api/v1/social/profile/:addr` | Get profile by address |
+| `GET` | `/api/v1/social/user/:username` | Get profile by username |
+| `GET` | `/api/v1/social/post/:id` | Get post |
+| `GET` | `/api/v1/social/post/:id/comments` | Post comments |
+| `GET` | `/api/v1/social/forums` | List forums |
+| `GET` | `/api/v1/social/forum/:id` | Forum posts |
+| `GET` | `/api/v1/social/stats` | Social stats |
+
+### P2P Exchange
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/exchange/register-wallet` | Register Tron USDT wallet |
+| `POST` | `/api/v1/exchange/create-order` | Create sell order (escrow) |
+| `POST` | `/api/v1/exchange/cancel-order` | Cancel open order |
+| `POST` | `/api/v1/exchange/claim-order` | Claim/buy an order |
+| `POST` | `/api/v1/exchange/confirm-payment` | Confirm USDT payment (TX hash) |
+| `POST` | `/api/v1/exchange/seller-confirm` | Seller manual confirmation |
+| `GET` | `/api/v1/exchange/orders` | Open orders |
+| `GET` | `/api/v1/exchange/order/:id` | Order details |
+| `GET` | `/api/v1/exchange/my-orders` | My orders |
+| `GET` | `/api/v1/exchange/my-wallet` | My registered Tron wallet |
+| `GET` | `/api/v1/exchange/stats` | Exchange stats |
+
 ## Tech Stack
 
 | Component | Technology |
@@ -469,6 +573,10 @@ src/
 │   └── p2p.js              # HTTP-based P2P sync
 ├── marketplace/
 │   └── marketplace.js      # Agent marketplace + escrow
+├── social/
+│   └── social.js            # Decentralized social network
+├── exchange/
+│   └── exchange.js          # P2P exchange (IOTAI/USDT)
 ├── consensus/
 │   └── validator.js        # Weight-based consensus
 ├── contracts/
@@ -488,7 +596,7 @@ sdk/
 ├── js/                     # JavaScript SDK (zero deps)
 └── python/                 # Python SDK (zero deps)
 
-docs/                       # Web UI (index, marketplace, explorer, dashboard)
+docs/                       # Web UI (index, marketplace, social, exchange, explorer, wallet, dashboard)
 tests/                      # 15 test suites, 199 tests
 ```
 
