@@ -80,7 +80,7 @@ export class Social {
     if (!result.success) throw new Error(result.error);
 
     this._indexProfile(tx);
-    return { txId: tx.id };
+    return { txId: tx.id, ...this.profiles.get(wallet.address) };
   }
 
   /**
@@ -324,16 +324,18 @@ export class Social {
     return this._enrichPost(post, viewerAddress);
   }
 
-  /** Get feed of posts from followed users, newest first */
+  /** Get feed of posts from followed users + own posts, newest first */
   getFeed(address, { limit = 20, offset = 0 } = {}) {
-    const following = this.follows.get(address);
-    if (!following || following.size === 0) return { posts: [] };
-
     const posts = [];
-    for (const target of following) {
-      const authorPosts = this.postsByAuthor.get(target) || [];
-      for (const p of authorPosts) {
-        if (!p.forumId) posts.push(p);
+    const following = this.follows.get(address);
+
+    // Posts from followed users
+    if (following) {
+      for (const target of following) {
+        const authorPosts = this.postsByAuthor.get(target) || [];
+        for (const p of authorPosts) {
+          if (!p.forumId) posts.push(p);
+        }
       }
     }
 
@@ -342,6 +344,8 @@ export class Social {
     for (const p of ownPosts) {
       if (!p.forumId) posts.push(p);
     }
+
+    if (posts.length === 0) return { posts: [] };
 
     posts.sort((a, b) => b.createdAt - a.createdAt);
     return { posts: posts.slice(offset, offset + limit).map(p => this._enrichPost(p, address)) };

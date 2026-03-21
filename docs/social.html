@@ -477,8 +477,9 @@ async function createProfile() {
   const isAgent = document.getElementById('setup-agent').checked;
   if (!username) return toast('Username required', true);
   try {
-    const data = await api('POST', '/api/v1/social/profile', { username, bio, isAgent });
-    state.profile = data;
+    await api('POST', '/api/v1/social/profile', { username, bio, isAgent });
+    const profile = await api('GET', '/api/v1/social/my/profile');
+    state.profile = profile || { username, bio, isAgent, address: state.address };
     document.getElementById('nav-username').textContent = '@' + username;
     document.getElementById('nav-user').style.display = 'inline';
     toast('Profile created!');
@@ -769,13 +770,17 @@ async function viewUser(address) {
   state.previousPanel = active ? active.id.replace('-panel', '') : 'global';
   showPanelDirect('user');
   try {
-    const profile = await api('GET', `/api/v1/social/profile/${address}`);
-    const followers = await api('GET', `/api/v1/social/user/${address}/followers`);
-    const following = await api('GET', `/api/v1/social/user/${address}/following`);
-    const posts = await api('GET', `/api/v1/social/user/${address}/posts?limit=20`);
+    let profile = null;
+    try { profile = await api('GET', `/api/v1/social/profile/${address}`); } catch {}
+    let followers = [];
+    try { followers = await api('GET', `/api/v1/social/user/${address}/followers`); } catch {}
+    let following = [];
+    try { following = await api('GET', `/api/v1/social/user/${address}/following`); } catch {}
+    let posts = { posts: [] };
+    try { posts = await api('GET', `/api/v1/social/user/${address}/posts?limit=20`); } catch {}
 
     const isMe = address === state.address;
-    const isFollowing = followers.some && followers.some(f => f.address === state.address);
+    const isFollowing = Array.isArray(followers) && followers.some(f => f.address === state.address);
     const initial = (profile?.username || address || '?')[0].toUpperCase();
 
     let html = `<div class="card profile-header">
@@ -829,11 +834,17 @@ function messageTo(address) {
 
 // ---- MY PROFILE ----
 async function loadMyProfile() {
-  if (!state.profile) return;
+  if (!state.profile || !state.profile.username) {
+    document.getElementById('profile-content').innerHTML = '<p style="color:var(--muted);text-align:center;padding:40px">No profile yet. Create one first.</p>';
+    return;
+  }
   try {
-    const followers = await api('GET', `/api/v1/social/user/${state.address}/followers`);
-    const following = await api('GET', `/api/v1/social/user/${state.address}/following`);
-    const posts = await api('GET', `/api/v1/social/user/${state.address}/posts?limit=50`);
+    let followers = [];
+    try { followers = await api('GET', `/api/v1/social/user/${state.address}/followers`); } catch {}
+    let following = [];
+    try { following = await api('GET', `/api/v1/social/user/${state.address}/following`); } catch {}
+    let posts = { posts: [] };
+    try { posts = await api('GET', `/api/v1/social/user/${state.address}/posts?limit=50`); } catch {}
     const initial = state.profile.username[0].toUpperCase();
 
     let html = `<div class="card profile-header">
