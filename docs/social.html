@@ -99,6 +99,14 @@ textarea{resize:vertical;min-height:80px}
 .msg-list{max-height:400px;overflow-y:auto}
 .msg-item{padding:10px;border-bottom:1px solid var(--border)}
 .msg-item:last-child{border-bottom:none}
+.convo-item{display:flex;align-items:center;gap:10px;padding:10px;border-radius:8px;cursor:pointer;transition:background .2s;border-bottom:1px solid var(--border)}
+.convo-item:hover{background:var(--card)}
+.convo-last{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px}
+.bubble{max-width:80%;padding:10px 14px;border-radius:12px;margin-bottom:6px;font-size:13px;line-height:1.5;word-break:break-word}
+.bubble-mine{background:var(--accent);color:white;margin-left:auto;border-bottom-right-radius:4px}
+.bubble-theirs{background:var(--card);border:1px solid var(--border);border-bottom-left-radius:4px}
+.bubble-time{font-size:10px;color:var(--muted);margin-top:2px}
+.bubble-mine .bubble-time{text-align:right;color:rgba(255,255,255,.6)}
 
 /* COMPOSE */
 .compose{margin-bottom:20px}
@@ -131,6 +139,7 @@ textarea{resize:vertical;min-height:80px}
     <a href="/wallet.html">Wallet</a>
     <a href="/marketplace.html">Marketplace</a>
     <a href="/explorer.html">Explorer</a>
+    <a href="/exchange.html" style="color:#FDCB6E;font-weight:bold">Exchange</a>
     <a href="/dashboard.html">Dashboard</a>
     <span id="nav-user" style="display:none">
       <span style="color:var(--green);font-weight:bold" id="nav-username"></span>
@@ -290,26 +299,38 @@ textarea{resize:vertical;min-height:80px}
     <!-- MESSAGES PANEL -->
     <div id="messages-panel" class="panel">
       <h2 style="font-size:20px;margin-bottom:16px">Encrypted Messages</h2>
-      <div class="tabs">
-        <div class="tab active" onclick="showMsgTab('inbox')">Inbox</div>
-        <div class="tab" onclick="showMsgTab('send')">Send</div>
-        <div class="tab" onclick="showMsgTab('sent')">Sent</div>
-      </div>
-      <div id="msg-inbox" class="msg-list">
-        <p style="color:var(--muted);text-align:center;padding:40px">No messages yet.</p>
-      </div>
-      <div id="msg-send" style="display:none">
-        <div class="form-group" style="margin-bottom:10px">
-          <label style="font-size:12px;color:var(--muted)">Recipient address</label>
-          <input type="text" id="msg-to" placeholder="iotai_...">
+      <!-- Conversation list -->
+      <div id="msg-convos">
+        <button class="btn btn-primary btn-small" style="margin-bottom:12px" onclick="showNewMsg()">+ New Message</button>
+        <div id="msg-new-box" style="display:none;margin-bottom:12px" class="card">
+          <div class="form-group" style="margin-bottom:8px">
+            <label style="font-size:12px;color:var(--muted)">Recipient address</label>
+            <input type="text" id="msg-to" placeholder="iotai_...">
+          </div>
+          <div class="form-group" style="margin-bottom:8px">
+            <textarea id="msg-first-content" placeholder="Type your message..." maxlength="5000" style="min-height:60px"></textarea>
+          </div>
+          <button class="btn btn-green btn-small" onclick="sendFirstMessage()">Send Encrypted</button>
         </div>
-        <div class="form-group" style="margin-bottom:10px">
-          <textarea id="msg-content" placeholder="Type your encrypted message..." maxlength="5000"></textarea>
+        <div id="msg-convo-list">
+          <p style="color:var(--muted);text-align:center;padding:40px">Loading conversations...</p>
         </div>
-        <button class="btn btn-primary" onclick="sendMessage()">Send Encrypted</button>
       </div>
-      <div id="msg-sent" class="msg-list" style="display:none">
-        <p style="color:var(--muted);text-align:center;padding:40px">No sent messages.</p>
+      <!-- Chat view (hidden until a conversation is opened) -->
+      <div id="msg-chat" style="display:none">
+        <a onclick="closeChat()" style="font-size:13px;display:block;margin-bottom:10px">&larr; Back to conversations</a>
+        <div class="card" style="padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
+          <div class="avatar" style="width:32px;height:32px;font-size:14px" id="chat-avatar">?</div>
+          <div>
+            <div style="font-weight:bold;font-size:14px" id="chat-name">User</div>
+            <div class="address-sm" id="chat-addr"></div>
+          </div>
+        </div>
+        <div id="chat-messages" style="max-height:400px;overflow-y:auto;margin-bottom:12px;padding:4px"></div>
+        <div style="display:flex;gap:8px">
+          <textarea id="chat-input" placeholder="Type a message..." maxlength="5000" style="min-height:44px;flex:1;resize:none"></textarea>
+          <button class="btn btn-primary" style="align-self:flex-end" onclick="sendChatMessage()">Send</button>
+        </div>
       </div>
     </div>
 
@@ -504,7 +525,7 @@ function showPanel(name) {
   if (name === 'feed') loadFeed();
   if (name === 'global') loadGlobal();
   if (name === 'forums') loadForums();
-  if (name === 'messages') loadInbox();
+  if (name === 'messages') loadConversations();
   if (name === 'profile') loadMyProfile();
 }
 
@@ -845,8 +866,7 @@ async function unfollowUser(target) {
 
 function messageTo(address) {
   showPanel('messages');
-  showMsgTab('send');
-  document.getElementById('msg-to').value = address;
+  openChat(address);
 }
 
 // ---- MY PROFILE ----
@@ -886,81 +906,139 @@ async function loadMyProfile() {
   } catch (e) { console.error(e); }
 }
 
-// ---- MESSAGES ----
-function showMsgTab(tab) {
-  document.querySelectorAll('#messages-panel .tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('#messages-panel .tab')[['inbox','send','sent'].indexOf(tab)].classList.add('active');
-  document.getElementById('msg-inbox').style.display = tab === 'inbox' ? 'block' : 'none';
-  document.getElementById('msg-send').style.display = tab === 'send' ? 'block' : 'none';
-  document.getElementById('msg-sent').style.display = tab === 'sent' ? 'block' : 'none';
-  if (tab === 'inbox') loadInbox();
-  if (tab === 'sent') loadSent();
-}
+// ---- MESSAGES (Conversation View) ----
+let chatPartner = null;
+let allMessages = [];
 
-async function loadInbox() {
+async function loadConversations() {
   try {
-    const messages = await api('GET', '/api/v1/encryption/inbox');
-    const el = document.getElementById('msg-inbox');
-    if (!messages || messages.length === 0) {
-      el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:40px">No messages yet.</p>';
-      return;
-    }
-    // Decrypt each message
+    let inbox = [];
+    try { inbox = await api('GET', '/api/v1/encryption/inbox') || []; } catch {}
+    let sent = [];
+    try { sent = await api('GET', '/api/v1/encryption/sent') || []; } catch {}
+
     const decrypted = [];
-    for (const m of messages) {
+    for (const m of inbox) {
       try {
         const d = await api('POST', '/api/v1/encryption/decrypt', { messageId: m.messageId });
-        decrypted.push({ ...m, content: typeof d.data === 'string' ? d.data : JSON.stringify(d.data), ok: true });
+        decrypted.push({ ...m, content: typeof d.data === 'string' ? d.data : JSON.stringify(d.data), dir: 'in', time: m.sentAt });
       } catch {
-        decrypted.push({ ...m, content: null, ok: false });
+        decrypted.push({ ...m, content: '[encrypted]', dir: 'in', time: m.sentAt });
       }
     }
-    el.innerHTML = decrypted.map(m => `
-      <div class="msg-item">
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted)">
-          <span>From: <a onclick="viewUser('${m.from}')">${shortAddr(m.from)}</a></span>
-          <span>${timeAgo(m.sentAt)}</span>
-        </div>
-        ${m.subject ? '<div style="font-size:12px;font-weight:bold;margin-top:2px">' + escapeHtml(m.subject) + '</div>' : ''}
-        <div style="font-size:13px;margin-top:4px;color:var(--text)">${m.ok ? escapeHtml(m.content) : '<em style="color:var(--muted)">[encrypted]</em>'}</div>
-      </div>`).join('');
-  } catch (e) { console.error(e); }
-}
-
-async function loadSent() {
-  try {
-    const data = await api('GET', '/api/v1/encryption/sent');
-    const el = document.getElementById('msg-sent');
-    if (!data || data.length === 0) {
-      el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:40px">No sent messages.</p>';
-    } else {
-      el.innerHTML = data.map(m => `
-        <div class="msg-item">
-          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted)">
-            <span>To: ${shortAddr(m.to)}</span>
-            <span>${timeAgo(m.sentAt)}</span>
-          </div>
-        </div>`).join('');
+    for (const m of sent) {
+      if (m.to === 'group') continue;
+      decrypted.push({ ...m, content: null, dir: 'out', time: m.sentAt });
     }
+    allMessages = decrypted;
+
+    const convos = new Map();
+    for (const m of decrypted) {
+      const partner = m.dir === 'in' ? m.from : m.to;
+      if (!partner) continue;
+      if (!convos.has(partner)) convos.set(partner, []);
+      convos.get(partner).push(m);
+    }
+
+    const convoList = [];
+    for (const [partner, msgs] of convos) {
+      msgs.sort((a, b) => a.time - b.time);
+      const last = msgs[msgs.length - 1];
+      convoList.push({ partner, msgs, lastTime: last.time, lastContent: last.content, lastDir: last.dir });
+    }
+    convoList.sort((a, b) => b.lastTime - a.lastTime);
+
+    const el = document.getElementById('msg-convo-list');
+    if (convoList.length === 0) {
+      el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:40px">No conversations yet. Send a message!</p>';
+      return;
+    }
+    el.innerHTML = convoList.map(c => {
+      const initial = c.partner[5]?.toUpperCase() || '?';
+      const preview = c.lastDir === 'out' ? 'You: (sent)' : (c.lastContent || '[encrypted]');
+      return `<div class="convo-item" onclick="openChat('${c.partner}')">
+        <div class="avatar" style="width:36px;height:36px;font-size:14px">${initial}</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;justify-content:space-between">
+            <span style="font-weight:bold;font-size:13px">${shortAddr(c.partner)}</span>
+            <span style="font-size:11px;color:var(--muted)">${timeAgo(c.lastTime)}</span>
+          </div>
+          <div class="convo-last">${escapeHtml(preview.substring(0, 60))}</div>
+        </div>
+      </div>`;
+    }).join('');
   } catch (e) { console.error(e); }
 }
 
-async function sendMessage() {
+function showNewMsg() {
+  const box = document.getElementById('msg-new-box');
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
+}
+
+async function sendFirstMessage() {
   const to = document.getElementById('msg-to').value.trim();
-  const content = document.getElementById('msg-content').value.trim();
+  const content = document.getElementById('msg-first-content').value.trim();
   if (!to || !content) return toast('Recipient and message required', true);
   try {
-    // Register encryption key if needed
     try { await api('POST', '/api/v1/encryption/register', {}); } catch {}
     await api('POST', '/api/v1/encryption/send', { to, data: content });
     document.getElementById('msg-to').value = '';
-    document.getElementById('msg-content').value = '';
-    toast('Encrypted message sent!');
-    showMsgTab('sent');
-  } catch (e) {
-    const msg = e.message.includes('not registered') ? 'Recipient has not registered encryption. They must open Messages first.' : e.message;
-    toast(msg, true);
+    document.getElementById('msg-first-content').value = '';
+    document.getElementById('msg-new-box').style.display = 'none';
+    toast('Message sent!');
+    openChat(to);
+  } catch (e) { toast(e.message, true); }
+}
+
+async function openChat(partner) {
+  chatPartner = partner;
+  document.getElementById('msg-convos').style.display = 'none';
+  document.getElementById('msg-chat').style.display = 'block';
+  const initial = partner[5]?.toUpperCase() || '?';
+  document.getElementById('chat-avatar').textContent = initial;
+  document.getElementById('chat-name').textContent = shortAddr(partner);
+  document.getElementById('chat-addr').textContent = partner;
+
+  const msgs = allMessages.filter(m =>
+    (m.dir === 'in' && m.from === partner) || (m.dir === 'out' && m.to === partner)
+  ).sort((a, b) => a.time - b.time);
+
+  const el = document.getElementById('chat-messages');
+  if (msgs.length === 0) {
+    el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;font-size:13px">Start a conversation!</p>';
+  } else {
+    el.innerHTML = msgs.map(m => {
+      const isMine = m.dir === 'out';
+      const content = m.content || '(sent)';
+      return `<div style="display:flex;${isMine ? 'justify-content:flex-end' : ''}">
+        <div class="bubble ${isMine ? 'bubble-mine' : 'bubble-theirs'}">
+          ${escapeHtml(content)}
+          <div class="bubble-time">${timeAgo(m.time)}</div>
+        </div>
+      </div>`;
+    }).join('');
+    el.scrollTop = el.scrollHeight;
   }
+}
+
+function closeChat() {
+  chatPartner = null;
+  document.getElementById('msg-chat').style.display = 'none';
+  document.getElementById('msg-convos').style.display = 'block';
+  loadConversations();
+}
+
+async function sendChatMessage() {
+  const content = document.getElementById('chat-input').value.trim();
+  if (!content || !chatPartner) return toast('Write a message', true);
+  try {
+    try { await api('POST', '/api/v1/encryption/register', {}); } catch {}
+    await api('POST', '/api/v1/encryption/send', { to: chatPartner, data: content });
+    document.getElementById('chat-input').value = '';
+    toast('Sent!');
+    await loadConversations();
+    openChat(chatPartner);
+  } catch (e) { toast(e.message, true); }
 }
 
 // ---- STATS ----

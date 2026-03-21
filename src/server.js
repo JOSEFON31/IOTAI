@@ -33,6 +33,7 @@ import { TokenManager } from './tokens/token-manager.js';
 import { BatchProcessor } from './core/batch.js';
 import { EncryptionLayer } from './core/encryption.js';
 import { Social } from './social/social.js';
+import { Exchange } from './exchange/exchange.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DOCS_DIR = resolve(__dirname, '../docs');
@@ -49,6 +50,7 @@ let tokenManager; // initialized after DAG loads
 let batchProcessor; // initialized after DAG loads
 let encryption;  // initialized after DAG loads
 let social;      // initialized after DAG loads
+let exchange;    // initialized after DAG loads
 const rateLimiter = new RateLimiter();
 const p2p = new P2PSync({
   dag,
@@ -130,6 +132,9 @@ async function initialize() {
 
   // Initialize social network
   social = new Social({ dag });
+
+  // Initialize P2P exchange
+  exchange = new Exchange({ dag });
 }
 
 await initialize();
@@ -149,6 +154,12 @@ setInterval(() => {
     const result = orchestrator.processTimeouts();
     if (result.timedOut > 0) {
       console.log(`[Orchestrator] ${result.timedOut} task(s) timed out and reopened`);
+    }
+  }
+  if (exchange) {
+    const result = exchange.processExpired();
+    if (result.expired > 0 || result.released > 0) {
+      console.log(`[Exchange] ${result.expired} expired, ${result.released} payment timeouts`);
     }
   }
 }, 5 * 60 * 1000);
@@ -511,6 +522,23 @@ async function handleAPI(req, path, body) {
     return { status: 200, data: { forum: social.forums.get(forumId) || null, posts: forumData.posts } };
   }
 
+  // ---- Exchange Public Routes ----
+  if (method === 'GET' && path === '/api/v1/exchange/stats') {
+    return { status: 200, data: exchange.getStats() };
+  }
+  if (method === 'GET' && path === '/api/v1/exchange/orders') {
+    const url = new URL(req.url, `http://localhost:${PORT}`);
+    const limit = parseInt(url.searchParams.get('limit') || '20');
+    const offset = parseInt(url.searchParams.get('offset') || '0');
+    return { status: 200, data: exchange.getOpenOrders({ limit, offset }) };
+  }
+  if (method === 'GET' && path.startsWith('/api/v1/exchange/order/')) {
+    const orderId = path.split('/api/v1/exchange/order/')[1];
+    const order = exchange.getOrder(orderId);
+    if (!order) return { status: 404, data: { error: 'Order not found' } };
+    return { status: 200, data: order };
+  }
+
   // ---- P2P Sync Routes (public, no auth required) ----
   if (method === 'GET' && path === '/api/v1/network/peers') {
     return { status: 200, data: p2p.getPeers() };
@@ -863,6 +891,56 @@ async function handleAPI(req, path, body) {
   }
   if (method === 'GET' && path === '/api/v1/encryption/sent') {
     return { status: 200, data: encryption.getSent(session.wallet.address) };
+  }
+
+  // ---- Exchange Authenticated Routes ----
+  if (method === 'POST' && path === '/api/v1/exchange/register-wallet') {
+    try {
+      const tips = dag.selectTips();
+      const result = exchange.registerUsdcWallet(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'GET' && path === '/api/v1/exchange/my-wallet') {
+    return { status: 200, data: { tronAddress: exchange.getUsdcWallet(session.wallet.address) } };
+  }
+  if (method === 'POST' && path === '/api/v1/exchange/create-order') {
+    try {
+      const tips = dag.selectTips();
+      const result = exchange.createOrder(session.wallet, tips, body);
+      return { status: 201, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/exchange/cancel-order') {
+    try {
+      const tips = dag.selectTips();
+      const result = exchange.cancelOrder(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/exchange/claim-order') {
+    try {
+      const tips = dag.selectTips();
+      const result = exchange.claimOrder(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/exchange/confirm-payment') {
+    try {
+      const tips = dag.selectTips();
+      const result = await exchange.confirmPayment(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'POST' && path === '/api/v1/exchange/seller-confirm') {
+    try {
+      const tips = dag.selectTips();
+      const result = exchange.sellerConfirmPayment(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'GET' && path === '/api/v1/exchange/my-orders') {
+    return { status: 200, data: exchange.getMyOrders(session.wallet.address) };
   }
 
   // ---- Social Network Authenticated Routes ----
