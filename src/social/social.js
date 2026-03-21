@@ -449,6 +449,9 @@ export class Social {
   // INDEXING
   // ============================================================
 
+  /** Re-index social data from DAG (called after P2P sync imports new txs) */
+  resync() { this._rebuildIndex(); }
+
   _rebuildIndex() {
     this.profiles.clear();
     this.usernames.clear();

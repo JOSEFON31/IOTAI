@@ -1,18 +1,19 @@
 /**
  * IOTAI Persistent Storage
  *
- * Saves DAG state to disk (fast cache) AND to GitHub (permanent backup).
- * On startup, loads from disk first; if empty, fetches from GitHub.
- * This ensures data survives Render redeploys (which wipe the filesystem).
+ * Saves DAG state to disk (fast cache) AND to GitHub (optional backup).
+ * On startup, loads from: disk → peers → GitHub → fresh.
+ * Peers-based recovery removes the hard dependency on GitHub.
  *
- * Required env var for persistence across deploys:
- *   GITHUB_TOKEN - Personal Access Token with 'repo' scope
+ * Optional env vars:
+ *   GITHUB_TOKEN - Personal Access Token with 'repo' scope (optional)
  *   GITHUB_REPO  - e.g. "JOSEFON31/IOTAI" (defaults to this)
  */
 
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { SEED_NODES, PEER_CONFIG } from './peers.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DATA_DIR = resolve(__dirname, '../../data');
@@ -30,10 +31,11 @@ export class Storage {
    * @param {import('./faucet.js').Faucet} params.faucet
    * @param {number} [params.autoSaveInterval=30000]
    */
-  constructor({ dag, faucet, autoSaveInterval = 30000 }) {
+  constructor({ dag, faucet, autoSaveInterval = 30000, seedNodes = null }) {
     this.dag = dag;
     this.faucet = faucet;
     this.autoSaveInterval = autoSaveInterval;
+    this.seedNodes = seedNodes || SEED_NODES;
     this.timer = null;
     this.saveCount = 0;
     this.lastGithubSave = 0;
@@ -61,8 +63,8 @@ export class Storage {
     if (this.githubEnabled) {
       console.log(`[Storage] GitHub backup enabled: ${GITHUB_REPO}@${GITHUB_BRANCH}`);
     } else {
-      console.log('[Storage] WARNING: No GITHUB_TOKEN set. Data will be lost on redeploy!');
-      console.log('[Storage] Set GITHUB_TOKEN env var in Render for persistent storage.');
+      console.log('[Storage] GitHub backup disabled (no GITHUB_TOKEN)');
+      console.log(`[Storage] Decentralized recovery enabled: ${this.seedNodes.length} seed node(s)`);
     }
   }
 
@@ -309,6 +311,81 @@ export class Storage {
     };
   }
 
+  // ==================== PEER RECOVERY (decentralized) ====================
+
+  /**
+   * Try to load full DAG state from any available seed peer.
+   * This removes the hard dependency on GitHub for state recovery.
+   */
+  async _loadFromPeers() {
+    const myUrl = process.env.RENDER_EXTERNAL_URL || '';
+    const peers = this.seedNodes.filter(u => u !== myUrl);
+    if (peers.length === 0) return null;
+
+    console.log(`[Storage] Trying to load from ${peers.length} seed peer(s)...`);
+
+    // Find the best peer (most transactions)
+    let bestPeer = null;
+    let bestTxCount = 0;
+
+    const checks = peers.map(async (peerUrl) => {
+      try {
+        const ctrl = new AbortController();
+        const timeout = setTimeout(() => ctrl.abort(), PEER_CONFIG.connectionTimeout);
+        const res = await fetch(`${peerUrl}/api/v1/p2p/state`, { signal: ctrl.signal });
+        clearTimeout(timeout);
+        if (!res.ok) return;
+        const data = await res.json();
+        const count = data.transactionCount || 0;
+        if (count > bestTxCount) {
+          bestTxCount = count;
+          bestPeer = peerUrl;
+        }
+      } catch {}
+    });
+    await Promise.all(checks);
+
+    if (!bestPeer || bestTxCount === 0) {
+      console.log('[Storage] No peers with data available');
+      return null;
+    }
+
+    console.log(`[Storage] Best peer: ${bestPeer} (${bestTxCount} txs)`);
+
+    // Pull full transaction set from best peer
+    try {
+      const ctrl = new AbortController();
+      const timeout = setTimeout(() => ctrl.abort(), 60_000); // 60s for full pull
+      const res = await fetch(`${bestPeer}/api/v1/p2p/transactions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ knownTxIds: [], requestMissing: true }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!res.ok) return null;
+      const data = await res.json();
+
+      if (data.transactions && data.transactions.length > 0) {
+        // Build a state object compatible with _restoreState
+        const state = {
+          version: 2,
+          transactions: data.transactions,
+          balances: data.balances || {},
+          nonces: [],
+          faucet: data.faucet || null,
+        };
+        console.log(`[Storage] Received ${data.transactions.length} txs from peer`);
+        return state;
+      }
+    } catch (err) {
+      console.error(`[Storage] Peer pull error: ${err.message}`);
+    }
+
+    return null;
+  }
+
   // ==================== PUBLIC API ====================
 
   /**
@@ -344,11 +421,11 @@ export class Storage {
   }
 
   /**
-   * Load state: try disk first, then GitHub
+   * Load state cascade: disk → peers → GitHub → fresh
    * @returns {boolean}
    */
   async load() {
-    console.log(`[Storage] Loading... GitHub enabled: ${this.githubEnabled}, token length: ${GITHUB_TOKEN.length}`);
+    console.log(`[Storage] Loading... GitHub: ${this.githubEnabled ? 'enabled' : 'disabled'}, Seeds: ${this.seedNodes.length}`);
 
     // 1. Try disk (fast, available within same deploy)
     const diskState = this._loadFromDisk();
@@ -361,9 +438,21 @@ export class Storage {
       }
     }
 
-    // 2. Try GitHub (permanent, survives redeploy)
+    // 2. Try peers (decentralized recovery — no GitHub needed)
+    console.log('[Storage] Disk empty, trying peers...');
+    const peerState = await this._loadFromPeers();
+    if (peerState && peerState.transactions?.length > 0) {
+      const ok = this._restoreState(peerState);
+      if (ok) {
+        console.log(`[Storage] Restored from peers: ${peerState.transactions.length} txs`);
+        this._saveToDisk(peerState);
+        return true;
+      }
+    }
+
+    // 3. Try GitHub (optional backup, no longer required)
     if (this.githubEnabled) {
-      console.log('[Storage] Disk empty, trying GitHub...');
+      console.log('[Storage] Peers unavailable, trying GitHub...');
       await this._ensureDataBranch();
       const githubState = await this._loadFromGithub();
       if (githubState && githubState.transactions?.length > 0) {
@@ -374,10 +463,10 @@ export class Storage {
           return true;
         }
       }
-    } else {
-      console.log('[Storage] WARNING: GITHUB_TOKEN not set! Data WILL be lost on redeploy.');
     }
 
+    // 4. Fresh start
+    console.log('[Storage] No state found. Starting fresh.');
     return false;
   }
 

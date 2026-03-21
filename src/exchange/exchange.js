@@ -439,6 +439,9 @@ export class Exchange {
   // INDEXING
   // ============================================================
 
+  /** Re-index orderbook from DAG (called after P2P sync imports new txs) */
+  resync() { this._rebuildIndex(); }
+
   _rebuildIndex() {
     this.orders.clear();
     this.usdcWallets.clear();

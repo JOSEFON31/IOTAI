@@ -12,6 +12,7 @@
  */
 
 import { hash } from '../core/crypto.js';
+import { SEED_NODES, PEER_CONFIG } from '../core/peers.js';
 
 export class P2PSync {
   /**
@@ -20,12 +21,16 @@ export class P2PSync {
    * @param {string} params.nodeId - Unique identifier for this node
    * @param {string} [params.nodeUrl] - Public URL of this node (for peers to connect back)
    * @param {number} [params.syncInterval] - Sync interval in ms (default 30s)
+   * @param {string[]} [params.seedNodes] - Bootstrap seed nodes
+   * @param {function} [params.onSyncComplete] - Callback after sync imports new txs
    */
-  constructor({ dag, nodeId, nodeUrl, syncInterval = 30000 }) {
+  constructor({ dag, nodeId, nodeUrl, syncInterval = 30000, seedNodes, onSyncComplete }) {
     this.dag = dag;
     this.nodeId = nodeId || this._generateNodeId();
     this.nodeUrl = nodeUrl || null;
     this.syncInterval = syncInterval;
+    this.seedNodes = seedNodes || SEED_NODES;
+    this.onSyncComplete = onSyncComplete || null;
 
     /** @type {Map<string, Peer>} url -> peer info */
     this.peers = new Map();
@@ -35,6 +40,8 @@ export class P2PSync {
 
     this.startedAt = Date.now();
     this._syncTimer = null;
+    this._healthTimer = null;
+    this._peerExchangeTimer = null;
     this._maxRecentSynced = 10000;
   }
 
@@ -42,24 +49,39 @@ export class P2PSync {
   // PUBLIC API
   // ============================================================
 
-  /** Start periodic sync */
+  /** Start periodic sync, auto-connect to seeds, health checks */
   start() {
     if (this._syncTimer) return;
+
+    // Auto-connect to seed nodes
+    this._connectToSeeds();
+
+    // Periodic sync
     this._syncTimer = setInterval(() => {
       this.syncWithPeers().catch(err =>
         console.error('[P2P] Sync error:', err.message)
       );
       this._pruneRecentSynced();
     }, this.syncInterval);
-    console.log(`[P2P] Node ${this.nodeId.substring(0, 8)} started (sync every ${this.syncInterval / 1000}s)`);
+
+    // Health check: remove dead peers, reconnect to seeds
+    this._healthTimer = setInterval(() => {
+      this._healthCheck();
+    }, PEER_CONFIG.healthCheckInterval);
+
+    // Peer exchange: ask peers for their peer lists
+    this._peerExchangeTimer = setInterval(() => {
+      this._peerExchange().catch(() => {});
+    }, PEER_CONFIG.peerExchangeInterval);
+
+    console.log(`[P2P] Node ${this.nodeId.substring(0, 8)} started (sync every ${this.syncInterval / 1000}s, ${this.seedNodes.length} seed(s))`);
   }
 
-  /** Stop periodic sync */
+  /** Stop all timers */
   stop() {
-    if (this._syncTimer) {
-      clearInterval(this._syncTimer);
-      this._syncTimer = null;
-    }
+    if (this._syncTimer) { clearInterval(this._syncTimer); this._syncTimer = null; }
+    if (this._healthTimer) { clearInterval(this._healthTimer); this._healthTimer = null; }
+    if (this._peerExchangeTimer) { clearInterval(this._peerExchangeTimer); this._peerExchangeTimer = null; }
   }
 
   /** Add a peer node */
@@ -251,6 +273,10 @@ export class P2PSync {
 
     if (accepted > 0) {
       console.log(`[P2P] Imported ${accepted} txs (${duplicate} dup, ${rejected} rejected)`);
+      // Notify listeners (exchange/social re-indexing)
+      if (this.onSyncComplete) {
+        try { this.onSyncComplete(accepted); } catch {}
+      }
     }
 
     return { accepted, rejected, duplicate, total: transactions.length };
@@ -359,6 +385,9 @@ export class P2PSync {
       peer.txReceived += received;
       if (received > 0) {
         console.log(`[P2P] Received ${received} txs from ${peer.nodeId?.substring(0, 8) || url}`);
+        if (this.onSyncComplete) {
+          try { this.onSyncComplete(received); } catch {}
+        }
       }
     }
 
@@ -439,6 +468,51 @@ export class P2PSync {
     if (this.recentlySynced.size > this._maxRecentSynced) {
       const arr = [...this.recentlySynced];
       this.recentlySynced = new Set(arr.slice(arr.length - 5000));
+    }
+  }
+
+  /** Auto-connect to all seed nodes on startup */
+  async _connectToSeeds() {
+    const myUrl = this.nodeUrl || '';
+    for (const seed of this.seedNodes) {
+      if (seed === myUrl || this.peers.has(seed)) continue;
+      this.addPeer(seed).catch(() => {});
+    }
+  }
+
+  /** Health check: remove dead peers, reconnect to seeds */
+  _healthCheck() {
+    const now = Date.now();
+    const deadTimeout = PEER_CONFIG.healthCheckInterval * 3; // 3 missed checks = dead
+
+    for (const [url, peer] of this.peers) {
+      if (peer.status === 'error' && peer.lastSeen && (now - peer.lastSeen > deadTimeout)) {
+        console.log(`[P2P] Removing dead peer ${url}`);
+        this.peers.delete(url);
+      }
+    }
+
+    // Reconnect to seeds if we lost them
+    this._connectToSeeds();
+  }
+
+  /** Peer exchange: ask peers for their peer lists, connect to new ones */
+  async _peerExchange() {
+    if (this.peers.size >= PEER_CONFIG.maxPeers) return;
+
+    for (const [url, peer] of this.peers) {
+      if (peer.status !== 'connected') continue;
+      try {
+        const peerList = await this._request(url, '/api/v1/p2p/peers', null, 'GET');
+        if (!Array.isArray(peerList)) continue;
+
+        for (const p of peerList) {
+          const pUrl = p.url || p;
+          if (!pUrl || pUrl === this.nodeUrl || this.peers.has(pUrl)) continue;
+          if (this.peers.size >= PEER_CONFIG.maxPeers) return;
+          this.addPeer(pUrl).catch(() => {});
+        }
+      } catch {}
     }
   }
 }

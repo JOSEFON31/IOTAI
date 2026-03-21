@@ -55,6 +55,11 @@ const rateLimiter = new RateLimiter();
 const p2p = new P2PSync({
   dag,
   nodeUrl: process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`,
+  onSyncComplete: (count) => {
+    // Re-index exchange and social after receiving new transactions from peers
+    if (exchange) exchange.resync();
+    if (social) social.resync();
+  },
 });
 
 // Sessions: token -> { wallet, expiresAt }
@@ -570,14 +575,23 @@ async function handleAPI(req, path, body) {
       }
       // Sort by timestamp to ensure correct ordering on the receiver
       missing.sort((a, b) => a.timestamp - b.timestamp);
-      return { status: 200, data: { transactions: missing, total: missing.length } };
+      const data = { transactions: missing, total: missing.length };
+      // Include balances and faucet for full state recovery
+      if (body.knownTxIds.length === 0) {
+        data.balances = Object.fromEntries(dag.balances);
+        data.faucet = faucet ? faucet.exportState() : null;
+      }
+      return { status: 200, data };
     }
     // Mode 2: Peer is pushing transactions to us
     const result = p2p.handleIncomingTransactions(body?.transactions || []);
     return { status: 200, data: result };
   }
   if (method === 'GET' && path === '/api/v1/p2p/state') {
-    return { status: 200, data: p2p.getStateDigest() };
+    return { status: 200, data: { ...p2p.getStateDigest(), transactionCount: dag.transactions.size } };
+  }
+  if (method === 'GET' && path === '/api/v1/p2p/peers') {
+    return { status: 200, data: p2p.getPeers() };
   }
 
   // Auth required
