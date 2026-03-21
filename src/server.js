@@ -35,6 +35,7 @@ import { EncryptionLayer } from './core/encryption.js';
 import { Social } from './social/social.js';
 import { Exchange } from './exchange/exchange.js';
 import { Agents } from './agents/agents.js';
+import { Swarm } from './swarm/swarm.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DOCS_DIR = resolve(__dirname, '../docs');
@@ -53,6 +54,7 @@ let encryption;  // initialized after DAG loads
 let social;      // initialized after DAG loads
 let exchange;    // initialized after DAG loads
 let agents;      // initialized after DAG loads
+let swarm;       // initialized after DAG loads
 const rateLimiter = new RateLimiter();
 const p2p = new P2PSync({
   dag,
@@ -62,6 +64,7 @@ const p2p = new P2PSync({
     if (exchange) exchange.resync();
     if (social) social.resync();
     if (agents) agents.resync();
+    if (swarm) swarm.resync();
   },
 });
 
@@ -146,6 +149,9 @@ async function initialize() {
 
   // Initialize AI agent marketplace
   agents = new Agents({ dag });
+
+  // Initialize Swarm AI
+  swarm = new Swarm({ dag, agents, orchestrator });
 }
 
 await initialize();
@@ -177,6 +183,12 @@ setInterval(() => {
     const result = agents.processExpired();
     if (result.expired > 0) {
       console.log(`[Agents] ${result.expired} query(s) expired`);
+    }
+  }
+  if (swarm) {
+    const result = swarm.processExpired();
+    if (result.expired > 0) {
+      console.log(`[Swarm] ${result.expired} job(s) expired`);
     }
   }
 }, 5 * 60 * 1000);
@@ -591,6 +603,20 @@ async function handleAPI(req, path, body) {
   if (method === 'GET' && path.startsWith('/api/v1/agents/conversation/')) {
     const convId = path.split('/api/v1/agents/conversation/')[1];
     return { status: 200, data: agents.getConversation(convId) };
+  }
+
+  // ---- Swarm AI Public Routes ----
+  if (method === 'GET' && path === '/api/v1/swarm/stats') {
+    return { status: 200, data: swarm.getSwarmStats() };
+  }
+  if (method === 'GET' && path === '/api/v1/swarm/models') {
+    return { status: 200, data: swarm.getAvailableModels() };
+  }
+  if (method === 'GET' && path.startsWith('/api/v1/swarm/job/')) {
+    const jobId = path.split('/api/v1/swarm/job/')[1];
+    const job = swarm.getSwarmJob(jobId);
+    if (!job) return { status: 404, data: { error: 'Job not found' } };
+    return { status: 200, data: job };
   }
 
   // ---- P2P Sync Routes (public, no auth required) ----
@@ -1054,6 +1080,18 @@ async function handleAPI(req, path, body) {
     if (!agent) return { status: 404, data: { error: 'Agent not found' } };
     if (agent.owner !== session.wallet.address) return { status: 403, data: { error: 'Not the agent owner' } };
     return { status: 200, data: agents.getPendingQueries(agentId) };
+  }
+
+  // ---- Swarm AI Authenticated Routes ----
+  if (method === 'POST' && path === '/api/v1/swarm/query') {
+    try {
+      const tips = dag.selectTips();
+      const result = swarm.submitSwarmQuery(session.wallet, tips, body);
+      return { status: 200, data: result };
+    } catch (e) { return { status: 400, data: { error: e.message } }; }
+  }
+  if (method === 'GET' && path === '/api/v1/swarm/my/jobs') {
+    return { status: 200, data: swarm.getUserJobs(session.wallet.address) };
   }
 
   // ---- Social Network Authenticated Routes ----

@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IOTAI Swarm — Decentralized AI</title>
+<style>
+:root{--bg:#0a0a1a;--bg2:#111133;--card:#1a1a3e;--border:#2a2a5e;--text:#e0e0f0;--muted:#888;--accent:#6C5CE7;--green:#00B894;--orange:#E17055;--blue:#0984E3;--yellow:#FDCB6E;--red:#d63031}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;line-height:1.6}
+a{color:var(--accent);text-decoration:none;cursor:pointer}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:var(--bg);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px}
+nav .logo{font-size:22px;font-weight:bold;background:linear-gradient(135deg,var(--orange),var(--yellow));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+nav .links{display:flex;gap:16px;align-items:center;font-size:13px}
+nav .links a{color:var(--muted)}
+.btn{display:inline-block;padding:10px 20px;border-radius:8px;border:none;cursor:pointer;font-size:14px;font-weight:600;transition:all .2s}
+.btn-primary{background:var(--accent);color:white}
+.btn-orange{background:var(--orange);color:white}
+.btn-small{padding:6px 14px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+input,select,textarea{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:14px;width:100%;font-family:inherit}
+input:focus,textarea:focus{outline:none;border-color:var(--accent)}
+label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--green);color:var(--green);padding:12px 20px;border-radius:8px;font-size:13px;z-index:999;display:none}
+.toast.error{border-color:var(--red);color:var(--red)}
+
+/* LOGIN */
+.login-box{max-width:480px;margin:80px auto;text-align:center;padding:20px}
+.login-box h2{font-size:28px;margin-bottom:8px}
+
+/* MAIN LAYOUT */
+.app{display:flex;flex-direction:column;margin-top:56px;height:calc(100vh - 56px)}
+
+/* STATS BAR */
+.stats-bar{display:flex;gap:16px;padding:12px 20px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted);align-items:center;flex-wrap:wrap}
+.stat-item{display:flex;align-items:center;gap:4px}
+.stat-item strong{color:var(--green)}
+
+/* CHAT */
+.chat-wrap{flex:1;display:flex;flex-direction:column;max-width:900px;width:100%;margin:0 auto}
+.chat-messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px}
+.msg-user{align-self:flex-end;max-width:75%;background:var(--accent);color:white;padding:12px 16px;border-radius:16px 16px 4px 16px;font-size:14px}
+.msg-agent{align-self:flex-start;max-width:75%;background:var(--card);border:1px solid var(--border);padding:12px 16px;border-radius:16px 16px 16px 4px;font-size:14px}
+.msg-time{font-size:10px;color:rgba(255,255,255,.5);margin-top:4px}
+.msg-agent .msg-time{color:var(--muted)}
+
+/* SUBTASK PROGRESS */
+.subtask-progress{align-self:flex-start;max-width:80%;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;font-size:13px}
+.subtask-progress h4{font-size:14px;color:var(--orange);margin-bottom:8px}
+.subtask-item{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)}
+.subtask-item:last-child{border-bottom:none}
+.st-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.st-pending{background:var(--muted)}
+.st-processing{background:var(--yellow);animation:pulse 1s infinite}
+.st-done{background:var(--green)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.st-name{flex:1;font-weight:600}
+.st-agent{color:var(--muted);font-size:11px}
+
+/* THINKING */
+.msg-thinking{align-self:flex-start;max-width:60%;background:var(--card);border:1px solid var(--border);padding:12px 16px;border-radius:16px 16px 16px 4px;font-size:14px;color:var(--muted)}
+.dots{animation:blink 1.4s infinite}
+@keyframes blink{0%,80%,100%{opacity:0}40%{opacity:1}}
+
+/* INPUT */
+.chat-input{padding:16px 20px;border-top:1px solid var(--border);background:var(--bg)}
+.chat-input-inner{max-width:900px;margin:0 auto}
+.input-row{display:flex;gap:10px}
+.input-row textarea{resize:none;min-height:44px;max-height:120px;flex:1}
+.input-meta{display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--muted)}
+.type-selector{display:flex;gap:6px;margin-bottom:8px}
+.type-btn{padding:4px 12px;border-radius:20px;font-size:11px;background:var(--card);border:1px solid var(--border);color:var(--muted);cursor:pointer}
+.type-btn.active{border-color:var(--orange);color:var(--orange);background:var(--bg2)}
+
+/* EMPTY */
+.chat-empty{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;padding:40px}
+.swarm-logo{font-size:64px;margin-bottom:16px}
+.feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:24px;text-align:left}
+.feature-item{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px}
+.feature-item strong{color:var(--text);display:block;margin-bottom:4px}
+
+@media(max-width:768px){.msg-user,.msg-agent,.subtask-progress{max-width:90%}.feature-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">IOTAI Swarm AI</div>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/agents.html">AI Agents</a>
+    <a href="/wallet.html">Wallet</a>
+    <a href="/social.html">Social</a>
+    <a href="/exchange.html">Exchange</a>
+    <a href="/explorer.html">Explorer</a>
+    <span id="nav-user" style="display:none">
+      <span style="color:var(--green);font-weight:bold" id="nav-addr"></span>
+      <span style="color:var(--yellow);margin:0 8px" id="nav-balance"></span>
+      <a onclick="logout()" style="color:var(--red);font-size:12px">Logout</a>
+    </span>
+  </div>
+</nav>
+
+<!-- LOGIN -->
+<div id="login-panel" class="login-box" style="margin-top:120px">
+  <h2>IOTAI Swarm AI</h2>
+  <p style="color:var(--muted);margin-bottom:24px">Decentralized AI powered by a network of agents.<br>Multiple AI models collaborate to answer your complex queries.</p>
+  <div style="margin-bottom:14px;text-align:left">
+    <label>Seed phrase or passphrase</label>
+    <input type="password" id="login-seed" placeholder="Enter your 12-word seed phrase">
+  </div>
+  <button class="btn btn-orange" style="width:100%" onclick="login()">Enter the Swarm</button>
+  <p id="login-error" style="color:var(--red);font-size:13px;display:none;margin-top:10px"></p>
+</div>
+
+<!-- APP -->
+<div id="app" class="app" style="display:none">
+
+  <!-- STATS BAR -->
+  <div class="stats-bar" id="stats-bar">
+    <div class="stat-item">Agents Online: <strong id="st-agents">0</strong></div>
+    <div class="stat-item">Models: <strong id="st-models">0</strong></div>
+    <div class="stat-item">Price Range: <strong id="st-price">-</strong></div>
+    <div class="stat-item">Swarm Jobs: <strong id="st-jobs">0</strong></div>
+  </div>
+
+  <!-- CHAT -->
+  <div class="chat-wrap">
+    <div class="chat-messages" id="chat-messages">
+      <!-- EMPTY STATE -->
+      <div class="chat-empty" id="chat-empty">
+        <div>
+          <div class="swarm-logo">&#129302;&#128279;&#129302;&#128279;&#129302;</div>
+          <h2>IOTAI Swarm AI</h2>
+          <p style="color:var(--muted);margin-top:8px;font-size:14px">A decentralized collective of AI agents working together.<br>Your query is decomposed, distributed, and assembled by the network.</p>
+          <div class="feature-grid">
+            <div class="feature-item">
+              <strong>Code Generation</strong>
+              <span style="color:var(--muted)">Requirements → Implementation → Review. Multiple agents collaborate on your code.</span>
+            </div>
+            <div class="feature-item">
+              <strong>Data Analysis</strong>
+              <span style="color:var(--muted)">Extract → Process → Summarize. Complex analysis across multiple AI models.</span>
+            </div>
+            <div class="feature-item">
+              <strong>Research</strong>
+              <span style="color:var(--muted)">Search → Compile → Synthesize. Deep research powered by the swarm.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INPUT -->
+    <div class="chat-input">
+      <div class="chat-input-inner">
+        <div class="type-selector">
+          <div class="type-btn active" onclick="selectType(this,'auto')">Auto-detect</div>
+          <div class="type-btn" onclick="selectType(this,'code')">Code</div>
+          <div class="type-btn" onclick="selectType(this,'analysis')">Analysis</div>
+          <div class="type-btn" onclick="selectType(this,'research')">Research</div>
+          <div class="type-btn" onclick="selectType(this,'creative')">Creative</div>
+          <div class="type-btn" onclick="selectType(this,'conversation')">Chat</div>
+        </div>
+        <div class="input-row">
+          <textarea id="chat-text" placeholder="Ask the Swarm anything..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendSwarmQuery()}"></textarea>
+          <button class="btn btn-orange" onclick="sendSwarmQuery()" id="send-btn">Send</button>
+        </div>
+        <div class="input-meta">
+          <span>Type: <strong id="sel-type">auto-detect</strong> | Cost estimated after analysis</span>
+          <span>Balance: <strong id="chat-balance">0</strong> IOTAI</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+<script src="/js/browser-node.js"></script>
+<script>
+const API = window.location.origin;
+let state = { token: null, address: null, balance: 0 };
+let selectedType = null; // null = auto-detect
+let pollingTimer = null;
+
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (state.token) opts.headers['Authorization'] = 'Bearer ' + state.token;
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(API + path, opts);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+function toast(msg, isError) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (isError ? ' error' : '');
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 3000);
+}
+
+function shortAddr(a) { return a ? a.substring(0, 12) + '...' : ''; }
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function formatResponse(text) {
+  return escapeHtml(text)
+    .replace(/```([\s\S]*?)```/g, '<pre style="background:var(--bg);padding:10px;border-radius:6px;margin:6px 0;overflow-x:auto;font-size:13px">$1</pre>')
+    .replace(/`([^`]+)`/g, '<code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:13px">$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>');
+}
+
+function selectType(el, type) {
+  document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  selectedType = type === 'auto' ? null : type;
+  document.getElementById('sel-type').textContent = type === 'auto' ? 'auto-detect' : type;
+}
+
+// ---- AUTH ----
+async function login() {
+  const seed = document.getElementById('login-seed').value.trim();
+  if (!seed) return;
+  try {
+    const body = seed.split(/\s+/).length >= 12 ? { mnemonic: seed } : { passphrase: seed };
+    const data = await api('POST', '/api/v1/auth/token', body);
+    state.token = data.token;
+    state.address = data.address;
+    localStorage.setItem('iotai_swarm_token', data.token);
+    localStorage.setItem('iotai_swarm_address', data.address);
+    localStorage.setItem('iotai_swarm_seed', seed);
+    await enterApp();
+  } catch (e) {
+    document.getElementById('login-error').textContent = e.message;
+    document.getElementById('login-error').style.display = 'block';
+  }
+}
+
+function logout() {
+  state = { token: null, address: null, balance: 0 };
+  if (pollingTimer) clearInterval(pollingTimer);
+  localStorage.removeItem('iotai_swarm_token');
+  localStorage.removeItem('iotai_swarm_address');
+  localStorage.removeItem('iotai_swarm_seed');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-panel').style.display = 'block';
+  document.getElementById('nav-user').style.display = 'none';
+}
+
+async function enterApp() {
+  document.getElementById('login-panel').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('nav-addr').textContent = shortAddr(state.address);
+  document.getElementById('nav-user').style.display = 'inline';
+  await updateBalance();
+  await loadStats();
+}
+
+async function updateBalance() {
+  try {
+    const b = await api('GET', '/api/v1/balance');
+    state.balance = b.balance || 0;
+    document.getElementById('nav-balance').textContent = state.balance.toLocaleString() + ' IOTAI';
+    document.getElementById('chat-balance').textContent = state.balance.toLocaleString();
+  } catch {}
+}
+
+async function loadStats() {
+  try {
+    const s = await api('GET', '/api/v1/swarm/stats');
+    document.getElementById('st-agents').textContent = s.totalAgentsOnline;
+    document.getElementById('st-models').textContent = Object.keys(s.modelCounts || {}).length;
+    document.getElementById('st-price').textContent = s.priceRange ? s.priceRange.min + '-' + s.priceRange.max + ' IOTAI' : '-';
+    document.getElementById('st-jobs').textContent = s.completedJobs + '/' + s.totalJobs;
+  } catch {}
+}
+
+// ---- SEND QUERY ----
+async function sendSwarmQuery() {
+  const text = document.getElementById('chat-text').value.trim();
+  if (!text) return;
+  if (text.length > 8000) return toast('Max 8000 characters', true);
+
+  const btn = document.getElementById('send-btn');
+  btn.disabled = true;
+
+  // Remove empty state
+  const empty = document.getElementById('chat-empty');
+  if (empty) empty.remove();
+
+  // Show user message
+  const el = document.getElementById('chat-messages');
+  el.innerHTML += `<div class="msg-user">${escapeHtml(text)}<div class="msg-time">just now</div></div>`;
+  el.scrollTop = el.scrollHeight;
+  document.getElementById('chat-text').value = '';
+
+  try {
+    const result = await api('POST', '/api/v1/swarm/query', {
+      message: text,
+      type: selectedType || undefined,
+      maxBudget: undefined,
+    });
+
+    await updateBalance();
+
+    if (result.type === 'simple') {
+      // Simple query — show thinking + poll
+      el.innerHTML += `<div class="msg-thinking" id="thinking-${result.queryId}"><span class="dots">&#9679; &#9679; &#9679;</span> ${escapeHtml(result.agentName)} is thinking... (${result.cost} IOTAI)</div>`;
+      el.scrollTop = el.scrollHeight;
+      pollSimpleJob(result.jobId, result.queryId);
+    } else {
+      // Complex query — show subtask progress
+      let stHtml = `<div class="subtask-progress" id="progress-${result.jobId}">
+        <h4>Swarm Processing — ${result.queryType} (${result.subtaskCount} subtasks, ${result.estimatedCost} IOTAI)</h4>`;
+      for (const st of result.subtasks) {
+        stHtml += `<div class="subtask-item" id="st-${result.jobId}-${st.name}">
+          <span class="st-dot st-pending"></span>
+          <span class="st-name">${st.name}</span>
+          <span class="st-agent">${st.agent} (${st.reward} IOTAI)</span>
+        </div>`;
+      }
+      stHtml += '</div>';
+      el.innerHTML += stHtml;
+      el.scrollTop = el.scrollHeight;
+      pollComplexJob(result.jobId);
+    }
+  } catch (e) {
+    toast(e.message, true);
+    el.innerHTML += `<div class="msg-agent" style="color:var(--red)">${escapeHtml(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function pollSimpleJob(jobId, queryId) {
+  let attempts = 0;
+  if (pollingTimer) clearInterval(pollingTimer);
+  pollingTimer = setInterval(async () => {
+    attempts++;
+    try {
+      const job = await api('GET', '/api/v1/swarm/job/' + jobId);
+      if (job.status === 'completed' && job.response) {
+        clearInterval(pollingTimer);
+        const thinkEl = document.getElementById('thinking-' + queryId);
+        if (thinkEl) thinkEl.outerHTML = `<div class="msg-agent">${formatResponse(job.response)}<div class="msg-time">just now</div></div>`;
+        document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;
+      } else if (job.status === 'expired' || attempts > 150) {
+        clearInterval(pollingTimer);
+        const thinkEl = document.getElementById('thinking-' + queryId);
+        if (thinkEl) thinkEl.outerHTML = `<div class="msg-agent" style="color:var(--red)">Agent did not respond (timed out)</div>`;
+      }
+    } catch {}
+  }, 2000);
+}
+
+function pollComplexJob(jobId) {
+  let attempts = 0;
+  if (pollingTimer) clearInterval(pollingTimer);
+  pollingTimer = setInterval(async () => {
+    attempts++;
+    try {
+      const job = await api('GET', '/api/v1/swarm/job/' + jobId);
+
+      // Update subtask dots
+      if (job.subtasks) {
+        for (const st of job.subtasks) {
+          const stEl = document.getElementById(`st-${jobId}-${st.name}`);
+          if (stEl) {
+            const dot = stEl.querySelector('.st-dot');
+            if (st.status === 'approved' || st.status === 'submitted') {
+              dot.className = 'st-dot st-done';
+            } else if (st.status === 'claimed') {
+              dot.className = 'st-dot st-processing';
+            }
+          }
+        }
+      }
+
+      if (job.status === 'completed' && job.response) {
+        clearInterval(pollingTimer);
+        const el = document.getElementById('chat-messages');
+        el.innerHTML += `<div class="msg-agent">${formatResponse(job.response)}<div class="msg-time">Swarm — ${job.subtasks?.length || 0} subtasks completed</div></div>`;
+        el.scrollTop = el.scrollHeight;
+        await updateBalance();
+      } else if (job.status === 'expired' || attempts > 300) {
+        clearInterval(pollingTimer);
+        const el = document.getElementById('chat-messages');
+        el.innerHTML += `<div class="msg-agent" style="color:var(--red)">Swarm job timed out</div>`;
+      }
+    } catch {}
+  }, 2000);
+}
+
+// ---- AUTO LOGIN ----
+(async () => {
+  const saved = localStorage.getItem('iotai_swarm_seed');
+  if (saved) {
+    try {
+      const body = saved.split(/\s+/).length >= 12 ? { mnemonic: saved } : { passphrase: saved };
+      const data = await api('POST', '/api/v1/auth/token', body);
+      state.token = data.token;
+      state.address = data.address;
+      await enterApp();
+    } catch { logout(); }
+  }
+})();
+</script>
+</body>
+</html>
