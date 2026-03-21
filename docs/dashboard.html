@@ -9,11 +9,20 @@
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;line-height:1.6}
 a{color:var(--accent);text-decoration:none}
-nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,10,26,0.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px}
-nav .logo{font-size:22px;font-weight:bold;background:linear-gradient(135deg,var(--accent),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-nav .links{display:flex;gap:16px;align-items:center}
-nav .links a{color:var(--muted);font-size:13px}
-nav .links a:hover{color:var(--text)}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,10,26,0.97);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px}
+nav .logo{font-size:22px;font-weight:bold;white-space:nowrap;background:linear-gradient(135deg,var(--accent),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-decoration:none}
+nav .links{display:flex;gap:6px;align-items:center}
+nav .links a{color:var(--muted);font-size:13px;padding:4px 8px;border-radius:6px;white-space:nowrap;transition:all .2s}
+nav .links a:hover{color:var(--text);text-decoration:none;background:rgba(108,92,231,0.1)}
+nav .links .nav-active{color:var(--text);font-weight:600}
+.hamburger{display:none;background:none;border:none;cursor:pointer;padding:8px;color:var(--text);font-size:24px}
+@media(max-width:768px){
+.hamburger{display:block}
+nav .links{display:none;position:absolute;top:56px;left:0;right:0;background:rgba(10,10,26,0.98);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);flex-direction:column;padding:12px 16px;gap:2px}
+nav .links.open{display:flex}
+nav .links a{padding:10px 16px;font-size:14px;width:100%;border-radius:8px}
+nav .links a:hover{background:rgba(108,92,231,0.15)}
+}
 .container{max-width:1300px;margin:0 auto;padding:72px 24px 40px}
 .page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px}
 .page-header h1{font-size:28px}
@@ -75,9 +84,16 @@ tr:hover td{background:#ffffff05}
 <body>
 <nav>
   <a href="/" class="logo">IOTAI</a>
+  <button class="hamburger" onclick="document.querySelector('.links').classList.toggle('open')" aria-label="Menu">&#9776;</button>
   <div class="links">
-    <a href="/">Home</a><a href="/wallet.html">Wallet</a><a href="/visualizer">Visualizer</a><a href="/marketplace.html">Marketplace</a>
-    <a href="/dashboard.html" style="color:var(--green);font-weight:bold">Dashboard</a>
+    <a href="/wallet.html">Wallet</a>
+    <a href="/agents.html">AI Agents</a>
+    <a href="/swarm.html">Swarm AI</a>
+    <a href="/social.html">Social</a>
+    <a href="/exchange.html">Exchange</a>
+    <a href="/marketplace.html">Marketplace</a>
+    <a href="/explorer.html">Explorer</a>
+    <a href="/dashboard.html" class="nav-active">Dashboard</a>
   </div>
 </nav>
 

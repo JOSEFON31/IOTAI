@@ -12,11 +12,24 @@ a{color:var(--accent);text-decoration:none;cursor:pointer}
 a:hover{text-decoration:underline}
 
 /* NAV */
-nav{position:fixed;top:0;left:0;right:0;z-index:100;background:var(--bg);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px}
-nav .logo{font-size:22px;font-weight:bold;background:linear-gradient(135deg,var(--accent),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-nav .links{display:flex;gap:16px;align-items:center;font-size:13px}
-nav .links a{color:var(--muted)}
-nav .links a:hover{color:var(--text);text-decoration:none}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,10,26,0.97);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px}
+nav .logo{font-size:22px;font-weight:bold;white-space:nowrap;background:linear-gradient(135deg,var(--accent),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-decoration:none}
+nav .links{display:flex;gap:6px;align-items:center}
+nav .links a{color:var(--muted);font-size:13px;padding:4px 8px;border-radius:6px;white-space:nowrap;transition:all .2s}
+nav .links a:hover{color:var(--text);text-decoration:none;background:rgba(108,92,231,0.1)}
+nav .links .nav-active{color:var(--text);font-weight:600}
+.hamburger{display:none;background:none;border:none;cursor:pointer;padding:8px;color:var(--text);font-size:24px}
+.nav-user{display:flex;align-items:center;gap:8px;font-size:12px}
+.nav-user .nav-addr{color:var(--green);font-weight:bold}
+.nav-user .nav-logout{color:var(--red);cursor:pointer;font-size:11px}
+@media(max-width:768px){
+.hamburger{display:block}
+nav .links{display:none;position:absolute;top:56px;left:0;right:0;background:rgba(10,10,26,0.98);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);flex-direction:column;padding:12px 16px;gap:2px}
+nav .links.open{display:flex}
+nav .links a{padding:10px 16px;font-size:14px;width:100%;border-radius:8px}
+nav .links a:hover{background:rgba(108,92,231,0.15)}
+.nav-user{padding:10px 16px;width:100%}
+}
 
 /* LAYOUT */
 .app{display:flex;margin-top:56px;min-height:calc(100vh - 56px)}
@@ -133,17 +146,20 @@ textarea{resize:vertical;min-height:80px}
 <body>
 
 <nav>
-  <div class="logo">IOTAI Social</div>
+  <a href="/" class="logo">IOTAI</a>
+  <button class="hamburger" onclick="document.querySelector('.links').classList.toggle('open')" aria-label="Menu">&#9776;</button>
   <div class="links">
-    <a href="/">Home</a>
     <a href="/wallet.html">Wallet</a>
+    <a href="/agents.html">AI Agents</a>
+    <a href="/swarm.html">Swarm AI</a>
+    <a href="/social.html" class="nav-active">Social</a>
+    <a href="/exchange.html">Exchange</a>
     <a href="/marketplace.html">Marketplace</a>
     <a href="/explorer.html">Explorer</a>
-    <a href="/exchange.html" style="color:#FDCB6E;font-weight:bold">Exchange</a>
     <a href="/dashboard.html">Dashboard</a>
-    <span id="nav-user" style="display:none">
-      <span style="color:var(--green);font-weight:bold" id="nav-username"></span>
-      <a onclick="logout()" style="color:var(--red);margin-left:8px;font-size:12px">Logout</a>
+    <span id="nav-user" class="nav-user" style="display:none">
+      <span class="nav-addr" id="nav-username"></span>
+      <a class="nav-logout" onclick="logout()">Logout</a>
     </span>
   </div>
 </nav>
