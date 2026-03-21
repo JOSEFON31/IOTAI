@@ -14,6 +14,22 @@ const USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 const TRONGRID_API = 'https://api.trongrid.io';
 const MIN_PRICE_PER_IOTAI = 0.1; // minimum 0.1 USDT per IOTAI
 const ESCROW_PREFIX = 'iotai_exchange_';
+
+// Base58 decode for Tron addresses (T... → 41... hex)
+const BASE58_CHARS = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+function tronBase58ToHex(addr) {
+  let num = 0n;
+  for (const c of addr) {
+    const i = BASE58_CHARS.indexOf(c);
+    if (i < 0) return addr;
+    num = num * 58n + BigInt(i);
+  }
+  let hex = num.toString(16);
+  // Tron address is 21 bytes (42 hex chars) — pad if needed
+  while (hex.length < 50) hex = '0' + hex;
+  // Return the 20-byte address part (skip first byte 0x41, skip last 4 bytes checksum)
+  return '41' + hex.substring(2, 42);
+}
 const ORDER_EXPIRY = 24 * 60 * 60 * 1000; // 24h
 const PAYMENT_TIMEOUT = 2 * 60 * 60 * 1000; // 2h to pay after claiming
 
@@ -306,6 +322,10 @@ export class Exchange {
       if (!events?.data) return false;
 
       // Look for Transfer event from USDT contract
+      // NOTE: We only verify destination + amount, NOT the sender address.
+      // This allows payments from exchanges (Binance, KuCoin, etc.) which
+      // use pool/hot wallets, so the sender address won't match the buyer's
+      // registered Tron address.
       for (const event of events.data) {
         if (event.contract_address !== USDT_CONTRACT) continue;
         if (event.event_name !== 'Transfer') continue;
@@ -315,11 +335,19 @@ export class Exchange {
 
         if (!toAddr || !amount) continue;
 
+        // Verify destination is the seller's Tron wallet (hex → base58 comparison)
+        // TronGrid returns addresses in hex format (41...), convert to match
+        const toHex = toAddr.toLowerCase().replace(/^0x/, '');
+        const expectedHex = expectedTo ? tronBase58ToHex(expectedTo).toLowerCase() : null;
+        const destMatch = !expectedTo || toHex === expectedHex || toAddr === expectedTo;
+
+        if (!destMatch) continue;
+
         // Convert amount (USDT has 6 decimals on Tron)
-        const usdcAmount = parseInt(amount) / 1_000_000;
+        const usdtAmount = parseInt(amount) / 1_000_000;
 
         // Allow 1% tolerance for fees
-        const amountMatch = usdcAmount >= expectedAmount * 0.99;
+        const amountMatch = usdtAmount >= expectedAmount * 0.99;
 
         if (amountMatch) return true;
       }
