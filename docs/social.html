@@ -941,12 +941,15 @@ async function sendMessage() {
   try {
     // Register encryption key if needed
     try { await api('POST', '/api/v1/encryption/register', {}); } catch {}
-    await api('POST', '/api/v1/encryption/send', { to, message: content });
+    await api('POST', '/api/v1/encryption/send', { to, data: content });
     document.getElementById('msg-to').value = '';
     document.getElementById('msg-content').value = '';
     toast('Encrypted message sent!');
     showMsgTab('sent');
-  } catch (e) { toast(e.message, true); }
+  } catch (e) {
+    const msg = e.message.includes('not registered') ? 'Recipient has not registered encryption. They must open Messages first.' : e.message;
+    toast(msg, true);
+  }
 }
 
 // ---- STATS ----
