@@ -272,6 +272,7 @@ const server = createServer(async (req, res) => {
 // ---- API Handler ----
 async function handleAPI(req, path, body) {
   const method = req.method;
+  const url = new URL(req.url, `http://localhost:${PORT}`);
 
   // Public
   if (method === 'POST' && path === '/api/v1/wallet/create') {
