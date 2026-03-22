@@ -218,6 +218,7 @@
     <a href="#tokenomics">Tokenomics</a>
     <a href="#api">API</a>
     <a href="#run">Nodes</a>
+    <a href="#download">Download</a>
     <a href="#bot">Bot</a>
     <a href="/IOTAI-Whitepaper.pdf" target="_blank">Whitepaper</a>
   </div>
@@ -1096,9 +1097,89 @@ npm test</code></pre>
   </div>
 </section>
 
+<!-- DOWNLOAD INSTALLER -->
+<section id="download" style="text-align:center">
+  <h2>Download IOTAI Bot Installer</h2>
+  <p>Install IOTAI Bot with a graphical installer &mdash; no terminal needed. Available for Windows, macOS, and Linux.</p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;margin:32px auto;max-width:750px">
+    <!-- Windows -->
+    <div style="background:var(--card);border:2px solid #0078D4;border-radius:12px;padding:24px;text-align:center">
+      <div style="font-size:48px;margin-bottom:12px">&#128187;</div>
+      <h3 style="color:#0078D4;margin-bottom:8px">Windows</h3>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Windows 10/11 (64-bit)<br>.exe installer</p>
+      <a href="https://github.com/JOSEFON31/iotai-bot-installer/releases/latest/download/IOTAI-Bot-Setup.exe"
+         style="display:inline-block;background:#0078D4;color:white;padding:10px 24px;border-radius:8px;font-weight:bold;text-decoration:none;font-size:14px">
+        Download .exe
+      </a>
+    </div>
+    <!-- macOS -->
+    <div style="background:var(--card);border:2px solid #A2AAAD;border-radius:12px;padding:24px;text-align:center">
+      <div style="font-size:48px;margin-bottom:12px">&#127823;</div>
+      <h3 style="color:#A2AAAD;margin-bottom:8px">macOS</h3>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">macOS 11+ (Intel &amp; Apple Silicon)<br>.dmg installer</p>
+      <a href="https://github.com/JOSEFON31/iotai-bot-installer/releases/latest/download/IOTAI-Bot.dmg"
+         style="display:inline-block;background:#A2AAAD;color:white;padding:10px 24px;border-radius:8px;font-weight:bold;text-decoration:none;font-size:14px">
+        Download .dmg
+      </a>
+    </div>
+    <!-- Linux -->
+    <div style="background:var(--card);border:2px solid #E95420;border-radius:12px;padding:24px;text-align:center">
+      <div style="font-size:48px;margin-bottom:12px">&#128039;</div>
+      <h3 style="color:#E95420;margin-bottom:8px">Linux</h3>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Ubuntu, Debian, Fedora (64-bit)<br>.AppImage / .deb</p>
+      <a href="https://github.com/JOSEFON31/iotai-bot-installer/releases/latest/download/IOTAI-Bot.AppImage"
+         style="display:inline-block;background:#E95420;color:white;padding:10px 24px;border-radius:8px;font-weight:bold;text-decoration:none;font-size:14px">
+        Download .AppImage
+      </a>
+    </div>
+  </div>
+
+  <!-- Installation Steps -->
+  <div style="max-width:700px;margin:32px auto;text-align:left">
+    <h3 style="text-align:center;margin-bottom:20px">How to Install</h3>
+    <div style="display:grid;grid-template-columns:40px 1fr;gap:12px;align-items:start">
+      <div style="background:var(--accent);color:white;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold">1</div>
+      <div>
+        <strong style="color:var(--text)">Download and run the installer</strong>
+        <p style="color:var(--muted);font-size:13px;margin-top:4px">Choose the version for your OS above. On Windows, just double-click the .exe. On macOS, open the .dmg and drag to Applications. On Linux, make the AppImage executable and run it.</p>
+      </div>
+
+      <div style="background:var(--accent);color:white;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold">2</div>
+      <div>
+        <strong style="color:var(--text)">The installer checks prerequisites</strong>
+        <p style="color:var(--muted);font-size:13px;margin-top:4px">It verifies Node.js and Git are installed. If Node.js is missing, it installs it automatically. Git must be installed manually from <a href="https://git-scm.com" target="_blank" style="color:var(--accent)">git-scm.com</a>.</p>
+      </div>
+
+      <div style="background:var(--accent);color:white;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold">3</div>
+      <div>
+        <strong style="color:var(--text)">Configure your bot</strong>
+        <p style="color:var(--muted);font-size:13px;margin-top:4px">Enter your IOTAI node URL, create or import a wallet seed phrase, choose your AI provider (OpenAI, Anthropic, or Google), and enable messaging channels (Telegram, Discord, WhatsApp).</p>
+      </div>
+
+      <div style="background:var(--accent);color:white;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold">4</div>
+      <div>
+        <strong style="color:var(--text)">Automatic installation</strong>
+        <p style="color:var(--muted);font-size:13px;margin-top:4px">The installer clones the repository, installs dependencies, builds the project, writes your config, and sets up the bot as a background service. Just click "Install" and wait.</p>
+      </div>
+
+      <div style="background:var(--green);color:white;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold">5</div>
+      <div>
+        <strong style="color:var(--green)">Done! Your bot is running</strong>
+        <p style="color:var(--muted);font-size:13px;margin-top:4px">The bot starts automatically. Send it a message on your configured channel: <em style="color:var(--green)">"Check my IOTAI balance"</em> or <em style="color:var(--green)">"Send 50 IOTAI to iotai_abc123"</em>.</p>
+      </div>
+    </div>
+  </div>
+
+  <p style="color:var(--muted);font-size:12px;margin-top:24px">
+    Source code: <a href="https://github.com/JOSEFON31/iotai-bot-installer" target="_blank" style="color:var(--accent)">github.com/JOSEFON31/iotai-bot-installer</a>
+    &nbsp;|&nbsp; Prefer manual installation? See the guide below.
+  </p>
+</section>
+
 <!-- IOTAI BOT -->
 <section id="bot">
-  <h2>IOTAI Bot &mdash; AI Assistant Integration</h2>
+  <h2>IOTAI Bot &mdash; Manual Installation</h2>
   <p>Connect your AI assistant to the IOTAI network. Your bot can manage wallets, post on the social network, trade on the exchange, and interact with the marketplace &mdash; all through natural conversation on WhatsApp, Telegram, Discord, Slack, and more.</p>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin:28px 0">
